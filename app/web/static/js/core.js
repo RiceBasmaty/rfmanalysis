@@ -12,6 +12,12 @@
   };
   // Categorical order validated for colour-vision deficiency (adjacent ΔE ≥ 15). Never cycle: max 4 series.
   RFM.SERIES = [RFM.T.blue, RFM.T.sky, RFM.T.green, RFM.T.purple];
+  // Segments (up to 8, fixed by rule order): brand hues plus three extras, order validated with the dataviz
+  // palette checker (adjacent CVD ΔE ≥ 15, normal-vision ΔE ≥ 15). Light fills always get a direct label.
+  RFM.SEGMENT_COLORS = ["#2846DC", "#5AB9FF", "#00A000", "#AA91E1", "#EB6834", "#14A3A3", "#E8A600", "#E87BA4"];
+  RFM.SEGMENT_INK = ["#fff", "#143255", "#fff", "#143255", "#fff", "#fff", "#143255", "#143255"];
+  RFM.segmentColor = (i) => (i < RFM.SEGMENT_COLORS.length ? RFM.SEGMENT_COLORS[i] : RFM.T.muted);
+  RFM.segmentInk = (i) => (i < RFM.SEGMENT_INK.length ? RFM.SEGMENT_INK[i] : "#fff");
 
   /* ---------- formatting ---------- */
   const nf = (d) => new Intl.NumberFormat("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });

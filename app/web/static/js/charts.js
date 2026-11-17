@@ -323,19 +323,30 @@
       },
     },
     "mk-segshare": {
-      title: "Segment share by market", sub: () => "Share of each market's customers in each segment", height: 440,
-      how: "Read down a column to see a market's mix. Compare across a row: a market with a much darker cell than the others over-indexes on that segment.",
+      title: "Segment mix by market", sub: () => "Each bar is one market's customers, split by segment (100%)", height: 460,
+      how: "Block height is the segment's share of that market's customers, so every bar adds up to 100%. Compare the same colour across bars: a taller block means the market over-indexes on that segment.",
       when: (ctx) => !!ctx.mk,
       chart: (ctx) => {
         const ms = ctx.mk.rows.map((r) => r.market), segs = ctx.order;
-        const data = ctx.mk.segment_share.filter((s) => ms.includes(s.market)).map((s) => [ms.indexOf(s.market), segs.indexOf(s.segment), +(s.share * 100).toFixed(1), s.customers]);
-        const mx = Math.max(...data.map((d) => d[2]), 1);
-        return { ...base(), grid: { left: 8, right: 8, top: 8, bottom: 8, containLabel: true },
-          tooltip: { ...base().tooltip, formatter: (p) => `${esc(ms[p.value[0]])} · ${esc(segs[p.value[1]])}<br><b>${p.value[2]}%</b> of the market's customers (${fmt(p.value[3])})` },
-          xAxis: axis({ type: "category", data: ms, position: "top", axisLine: { show: false }, axisLabel: { color: T.navy, fontWeight: 600 } }),
-          yAxis: axis({ type: "category", data: segs, inverse: true, axisLine: { show: false }, axisLabel: { color: T.navy } }),
-          visualMap: { show: false, min: 0, max: mx, dimension: 2, inRange: { color: T.seq } },
-          series: [{ type: "heatmap", data: data.map(heatLabel(data, 2)), itemStyle: { borderColor: "#fff", borderWidth: 3, borderRadius: 6 }, label: { show: ms.length <= 8, formatter: (p) => p.value[2].toFixed(0) + "%" } }] };
+        const cell = {};
+        ctx.mk.segment_share.forEach((s) => (cell[s.market + "|" + s.segment] = s));
+        return { ...base(), grid: { left: 8, right: 8, top: 64, bottom: 8, containLabel: true },
+          legend: { ...base().legend, type: "plain", data: segs },
+          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow,
+            formatter: (ps) => `<b>${esc(ps[0].axisValue)}</b><br>` + ps.slice().reverse().map((p) => {
+              const c = cell[p.axisValue + "|" + p.seriesName];
+              return `${p.marker}${esc(p.seriesName)}: <b>${pct(p.value, 1)}</b> <span style="color:${T.muted}">(${fmt(c ? c.customers : 0)})</span>`;
+            }).join("<br>") },
+          xAxis: axis({ type: "category", data: ms, axisLabel: { color: T.navy, fontWeight: 600, fontSize: 12.5 } }),
+          yAxis: axis({ type: "value", min: 0, max: 1, axisLabel: { color: T.muted, formatter: (v) => pct(v) } }),
+          series: segs.map((seg, i) => ({
+            name: seg, type: "bar", stack: "mix", barMaxWidth: 64, color: RFM.segmentColor(i),
+            data: ms.map((m) => (cell[m + "|" + seg] ? cell[m + "|" + seg].share : 0)),
+            itemStyle: { borderColor: "#fff", borderWidth: 1 },
+            label: { show: true, position: "inside", color: RFM.segmentInk(i), fontSize: 11, fontWeight: 600,
+              formatter: (p) => (p.value >= 0.04 ? pct(p.value) : "") },
+            emphasis: { focus: "series" },
+          })) };
       },
       table: (ctx) => {
         const ms = ctx.mk.rows.map((r) => r.market);
@@ -378,7 +389,7 @@
     overview: { label: "Overview", rows: [["ov-stats"], ["ov-insights", "ov-share"], ["ov-conc", "ov-data"]] },
     segments: { label: "Segments", rows: [["seg-kpis"], ["seg-rf", "seg-map"], ["seg-mix"], ["seg-actions"], ["seg-cutoffs"]] },
     cohorts: { label: "Cohorts", rows: [["coh-stats"], ["coh-heat"], ["coh-ltv", "coh-second"], ["coh-monthly"]] },
-    markets: { label: "Markets", rows: [["mk-none"], ["mk-cards"], ["mk-table"], ["mk-segshare", "mk-retention"]] },
+    markets: { label: "Markets", rows: [["mk-none"], ["mk-cards"], ["mk-table"], ["mk-segshare"], ["mk-retention"]] },
     categories: { label: "Product categories", later: true, rows: [["cat-later"]] },
   };
 
