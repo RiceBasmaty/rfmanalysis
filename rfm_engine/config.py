@@ -35,6 +35,15 @@ class RunConfig:
     # Frozen thresholds from an earlier run (dict as saved in rfm_thresholds.json), or None
     frozen_thresholds: dict[str, Any] | None = None
     baseline_label: str | None = None         # shown in the report when thresholds are frozen
+    # Cohorts (L5)
+    cohort_grain: str = "month"               # month | quarter
+    cohort_periods: int = 12                  # periods to follow after acquisition
+    cohort_start: str = "first_ever"          # first_ever (customers.first_purchase_date) | first_in_window
+    # Markets (L2)
+    small_segment_threshold: int = 30         # segments below this many customers in a market are flagged
+    max_filter_markets: int = 8               # markets beyond this (by customers) are grouped as "Other"
+    # Trims chosen on the data-check screen; applied after cleaning, before identity linking
+    trims: dict[str, Any] = field(default_factory=dict)
     notes: str = ""
 
     # ---------- (de)serialisation ----------
@@ -122,6 +131,17 @@ class RunConfig:
             stop("Duplicate segment names", "Two rules have the same segment name.", "Give every rule a unique name.")
         self.segment_rules = rules
 
+        if self.cohort_grain not in ("month", "quarter"):
+            stop("Cohort size not valid", f"Got “{self.cohort_grain}”.", "Choose month or quarter.")
+        if self.cohort_start not in ("first_ever", "first_in_window"):
+            stop("Cohort start not valid", f"Got “{self.cohort_start}”.", "Choose first_ever or first_in_window.")
+        self.cohort_periods = int(self.cohort_periods)
+        if not 1 <= self.cohort_periods <= 48:
+            stop("Cohort periods not valid", f"Got {self.cohort_periods}.", "Use a value between 1 and 48.")
+        self.small_segment_threshold = max(0, int(self.small_segment_threshold))
+        self.max_filter_markets = max(1, int(self.max_filter_markets))
+        self.trims = validate_trims(self.trims or {})
+
         th = self.frozen_thresholds
         if th:
             need = ("recency_days_edges", "monetary_edges", "frequency_bin_edges")
@@ -132,6 +152,33 @@ class RunConfig:
                 warnings.append(f"Frozen thresholds are in {th['reporting_currency']}, this run uses "
                                 f"{self.reporting_currency} — monetary cut-offs are not comparable.")
         return warnings
+
+
+TRIM_KEYS = ("date_from", "date_to", "exclude_markets", "exclude_mediums", "exclude_stores", "min_amount", "max_amount")
+
+
+def validate_trims(t: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for k in ("date_from", "date_to"):
+        v = (t.get(k) or "").strip() if isinstance(t.get(k), str) else t.get(k)
+        if v:
+            if not re.match(r"^\d{4}-\d{2}(-\d{2})?$", str(v)):
+                stop("Trim date not valid", f"“{v}” is not YYYY-MM or YYYY-MM-DD.", "Pick a month in the date range.")
+            out[k] = str(v)
+    for k in ("exclude_markets", "exclude_mediums", "exclude_stores"):
+        vals = [str(x).strip() for x in (t.get(k) or []) if str(x).strip()]
+        if vals:
+            out[k] = sorted(set(vals))
+    for k in ("min_amount", "max_amount"):
+        v = t.get(k)
+        if v not in (None, ""):
+            try:
+                out[k] = float(v)
+            except (TypeError, ValueError):
+                stop("Order value limit not valid", f"“{v}” is not a number.", "Enter a number or leave it empty.")
+    if "min_amount" in out and "max_amount" in out and out["min_amount"] > out["max_amount"]:
+        stop("Order value limits not valid", "The minimum is above the maximum.", "Swap the two values.")
+    return out
 
 
 # ---------- safe segment rules ----------

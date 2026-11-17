@@ -1,0 +1,180 @@
+{
+ "snapshot": "2026-11-01",
+ "window_start": "2024-11-01",
+ "rows_received": 104515,
+ "rows_clean": 104469,
+ "rows_identified": 86688,
+ "customers": 24999,
+ "outliers": 1,
+ "scored": 24998,
+ "thresholds": {
+  "recency_days_edges": [
+   41.0,
+   89.0,
+   310.0,
+   504.0
+  ],
+  "monetary_edges": [
+   628.94,
+   1533.91,
+   3031.07,
+   6897.9
+  ],
+  "frequency_bin_edges": [
+   1,
+   2,
+   3,
+   4,
+   6
+  ]
+ },
+ "segment_sizes": {
+  "Hibernating": 8195,
+  "New Customers": 3364,
+  "Needs Attention": 3302,
+  "Potential Loyalists": 3172,
+  "Champions": 2766,
+  "At Risk High Value": 1780,
+  "Loyal High Value": 1682,
+  "Reactivated": 737
+ },
+ "net_revenue": 115352509.8,
+ "coverage": {
+  "Purchases identified": 0.820017,
+  "Revenue identified": 0.831957,
+  "Retail purchases linked": 0.64519,
+  "Ecommerce purchases linked": 0.999467
+ },
+ "dq": [
+  [
+   "customers",
+   "net revenue \u2264 0 after returns (fully returned)",
+   "info",
+   369
+  ],
+  [
+   "customers",
+   "outlier / possible B2B (F > 48 or M > 91,553 SEK)",
+   "warning",
+   1
+  ],
+  [
+   "identity",
+   "rows linked via customer_id \u2192 email",
+   "info",
+   14311
+  ],
+  [
+   "items",
+   "transaction_amount \u2260 sum of item lines (>1%)",
+   "warning",
+   15
+  ],
+  [
+   "transactions",
+   "currency missing",
+   "warning",
+   4
+  ],
+  [
+   "transactions",
+   "currency not uppercase",
+   "warning",
+   8
+  ],
+  [
+   "transactions",
+   "date before window start 2024-11-01",
+   "info",
+   3
+  ],
+  [
+   "transactions",
+   "date on/after snapshot 2026-11-01",
+   "warning",
+   3
+  ],
+  [
+   "transactions",
+   "ecommerce transaction without any identifier",
+   "warning",
+   27
+  ],
+  [
+   "transactions",
+   "exact duplicate rows",
+   "warning",
+   40
+  ],
+  [
+   "transactions",
+   "hashed_email in uppercase",
+   "warning",
+   5
+  ],
+  [
+   "transactions",
+   "hashed_email not a 64-char SHA-256 hex",
+   "warning",
+   5
+  ],
+  [
+   "transactions",
+   "transaction without identifier (anonymous)",
+   "info",
+   17781
+  ]
+ ],
+ "cleaning_log": [
+  [
+   "remove exact duplicates",
+   104475
+  ],
+  [
+   "remove conflicting duplicate ids",
+   104475
+  ],
+  [
+   "remove empty transaction_id",
+   104475
+  ],
+  [
+   "remove invalid dates",
+   104475
+  ],
+  [
+   "keep analysis window",
+   104469
+  ],
+  [
+   "remove invalid amounts",
+   104469
+  ],
+  [
+   "remove rows without FX rate",
+   104469
+  ],
+  [
+   "keep identified transactions",
+   86688
+  ]
+ ],
+ "kpi_total": {
+  "customers": 24998.0,
+  "customer_share": 1.0,
+  "net_revenue": 115352509.799442,
+  "revenue_share": 1.0,
+  "revenue_per_customer": 4614.46955,
+  "aov": 1494.049171,
+  "avg_purchases": 3.230538,
+  "median_days_since_purchase": 203.0,
+  "return_rate": 0.043947,
+  "loyalty_share": 0.539483,
+  "consent_share": 0.597408
+ },
+ "rfm_sum": [
+  75103,
+  62110,
+  74994
+ ]
+}
