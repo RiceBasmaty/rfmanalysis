@@ -3,3 +3,4 @@ pytest==8.3.4
 # only for tests/reference/run_notebook.py (re-creating the notebook reference numbers)
 ipython
 plotly==5.24.1
+httpx==0.28.1

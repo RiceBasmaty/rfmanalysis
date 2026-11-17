@@ -65,7 +65,7 @@ def cohort_tables(cust: pd.DataFrame, txi: pd.DataFrame, cfg: RunConfig, snap: p
 
     rows = [{"cohort": _label(int(c), grain), "period": int(c), "customers": int(sizes.iloc[i]),
              "retention": lst(ret[i]), "revenue_retention": lst(rev_ret[i]), "cum_revenue_per_customer": lst(cum[i])}
-            for i, c in enumerate(cohorts)]
+            for i, c in enumerate(cohorts) if last_complete - c >= 1]     # at least one follow-up period
     out["retention_curve"] = _weighted_curve(rows, n_per)
     if curve_only:
         return out
