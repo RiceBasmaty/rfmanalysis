@@ -1,0 +1,796 @@
+<title>RFM Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: white app shell, slim top bar with a chevron stepper (Precis agenda shapes),
+   content sits on a large rounded paper-grey stage with white cards — like the Precis slide panels. */
+:root {
+  /* Precis blue */
+  --blue-lp: #EBF3FC; --blue-l: #C8E1FF; --blue: #2846DC; --navy: #143255;
+  /* Precis green */
+  --green-lp: #EDF9E1; --green-l: #CDF5A0; --green: #00A000; --green-d: #05412D;
+  /* Precis neutrals */
+  --white: #FFFFFF; --paper: #F6F5F1; --line: #DCE3E2; --muted: #879191; --ink-2: #323737; --ink: #000000;
+  /* Chart extras + status */
+  --sky: #5AB9FF; --purple: #AA91E1; --attention: #FFC83C; --negative: #FF4B50;
+  --attention-lp: #FFF6DC; --negative-lp: #FFE8E8;
+  --text: var(--navy);
+  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --r-lg: 24px; --r-md: 16px; --r-sm: 10px;
+  color-scheme: light;
+}
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { background: var(--white); }
+body { font-family: var(--font-body); color: var(--text); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+h1, h2, h3, h4 { font-family: var(--font-display); color: var(--ink); margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h1 { font-size: clamp(28px, 4vw, 40px); font-weight: 600; line-height: 1.08; }
+h2 { font-size: 22px; font-weight: 600; line-height: 1.2; }
+h3 { font-size: 17px; font-weight: 600; color: var(--navy); }
+p { margin: 0; }
+.eyebrow { font-size: 13px; color: var(--muted); font-weight: 500; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------- Top bar ---------- */
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--white); border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--white); }
+.topbar-inner { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding-block: 12px;
+  padding-left: max(24px, env(safe-area-inset-left, 0px)); padding-right: max(24px, env(safe-area-inset-right, 0px)); }
+.brand { display: flex; align-items: baseline; gap: 2px; font-family: var(--font-display); font-weight: 700; font-size: 19px; color: var(--ink); text-decoration: none; }
+.brand .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; margin-left: 2px; }
+.run-chip { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.run-chip b { color: var(--navy); font-weight: 600; }
+.stepper { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.step { --bg: var(--paper); --fg: var(--muted); border: 0; cursor: pointer; background: var(--bg); color: var(--fg);
+  padding: 9px 30px 9px 16px; border-radius: 12px 0 0 12px; font-family: var(--font-display); font-weight: 600; font-size: 14px;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%); display: flex; gap: 8px; align-items: center; transition: background .15s; }
+.step .n { font-size: 12px; opacity: .8; }
+.step.done { --bg: var(--blue-l); --fg: var(--navy); }
+.step.active { --bg: var(--navy); --fg: var(--white); }
+.step:hover:not(.active) { --bg: var(--blue-lp); --fg: var(--navy); }
+
+/* ---------- Stage ---------- */
+.page { padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.stage { background: var(--paper); border-radius: var(--r-lg); padding: clamp(18px, 3vw, 36px); max-width: 1320px; margin: 0 auto; display: grid; gap: 24px; }
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.page-head .lead { max-width: 62ch; margin-top: 10px; color: var(--ink-2); font-size: 15px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---------- Buttons, inputs ---------- */
+.btn { border: 0; cursor: pointer; border-radius: 999px; padding: 11px 20px; font-weight: 600; font-size: 14px; display: inline-flex; gap: 8px; align-items: center; text-decoration: none; transition: background .15s, color .15s; }
+.btn-primary { background: var(--blue); color: var(--white); }
+.btn-primary:hover { background: var(--navy); }
+.btn-secondary { background: var(--white); color: var(--navy); box-shadow: inset 0 0 0 1px var(--line); }
+.btn-secondary:hover { background: var(--blue-lp); }
+.btn-ghost { background: transparent; color: var(--blue); padding: 8px 10px; }
+.btn-ghost:hover { background: var(--blue-lp); }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field label, .label { font-size: 12.5px; font-weight: 600; color: var(--navy); }
+.field .hint { font-size: 12.5px; color: var(--muted); }
+.input, select.input, textarea.input { width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px 12px; font-size: 14px; color: var(--navy); }
+.input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-lp); }
+.seg { display: inline-flex; background: var(--paper); border-radius: 999px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: 999px; cursor: pointer; font-weight: 600; font-size: 13px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--white); color: var(--blue); box-shadow: 0 1px 2px rgba(20,50,85,.12); }
+.switch { display: inline-flex; gap: 10px; align-items: center; cursor: pointer; font-size: 13.5px; }
+.switch input { appearance: none; width: 38px; height: 22px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; transition: background .15s; flex: none; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--white); transition: transform .15s; }
+.switch input:checked { background: var(--blue); }
+.switch input:checked::after { transform: translateX(16px); }
+input[type="range"] { accent-color: var(--blue); width: 100%; }
+
+/* ---------- Cards ---------- */
+.card { background: var(--white); border-radius: var(--r-md); padding: 22px; display: grid; gap: 14px; align-content: start; min-width: 0; }
+.card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.card-head .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.grid { display: grid; gap: 16px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.g4 { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.span-2 { grid-column: 1 / -1; }
+.mk-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 760px) { .mk-grid { grid-template-columns: 1fr; } }
+
+/* Stat tiles — "stats in steps" */
+.stat { border-radius: var(--r-md); padding: 18px 20px; display: grid; gap: 4px; align-content: space-between; min-height: 132px; background: var(--white); }
+.stat .k { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; color: var(--navy); display: flex; justify-content: space-between; gap: 8px; }
+.stat .v { font-family: var(--font-display); font-weight: 600; font-size: clamp(28px, 3.2vw, 38px); line-height: 1.05; color: var(--blue); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.stat .s { font-size: 12.5px; color: var(--ink-2); }
+.stat.hl { background: var(--navy); }
+.stat.hl .k, .stat.hl .s { color: var(--blue-l); }
+.stat.hl .v { color: var(--white); }
+.stat.lp { background: var(--blue-lp); }
+.stat.lt { background: var(--blue-l); }
+.stat.lt .v { color: var(--navy); }
+.tri { font-size: 11px; }
+.tri.up { color: var(--green); } .tri.down { color: var(--negative); }
+
+/* Pills & badges */
+.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--green-lp); color: #006E00; }
+.pill.warn { background: var(--attention-lp); color: #7A5600; }
+.pill.crit { background: var(--negative-lp); color: #B3141A; }
+.pill.info { background: var(--blue-lp); color: var(--blue); }
+.pill.na { background: var(--paper); color: var(--muted); }
+.chip { border: 1px solid var(--line); background: var(--white); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--navy); }
+.chip[aria-pressed="true"] { background: var(--navy); border-color: var(--navy); color: var(--white); }
+.chip[aria-pressed="false"] { text-decoration: line-through; color: var(--muted); }
+
+/* Banners */
+.banner { border-radius: var(--r-md); padding: 16px 20px; display: flex; gap: 14px; align-items: flex-start; }
+.banner .ico { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; flex: none; font-size: 14px; }
+.banner.warn { background: var(--attention-lp); } .banner.warn .ico { background: var(--attention); color: var(--ink); }
+.banner.ok { background: var(--green-lp); } .banner.ok .ico { background: var(--green); color: var(--white); }
+.banner.info { background: var(--blue-lp); } .banner.info .ico { background: var(--blue); color: var(--white); }
+.banner h4 { font-size: 15px; color: var(--navy); }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+table.t { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+table.t th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.t td { padding: 10px 12px; border-bottom: 1px solid var(--paper); vertical-align: middle; }
+table.t td.n, table.t th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.t tr.total td { font-weight: 700; border-top: 1px solid var(--line); }
+table.t tbody tr:hover td { background: var(--blue-lp); }
+.bar-cell { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.bar-cell i { display: block; height: 8px; border-radius: 0 4px 4px 0; background: var(--blue); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: -1px; }
+
+/* Source cards (connect) */
+.source { border: 2px solid transparent; cursor: pointer; text-align: left; }
+.source[aria-pressed="true"] { border-color: var(--blue); }
+.source .src-ico { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: var(--blue-lp); color: var(--blue); font-family: var(--font-display); font-weight: 700; }
+.source[aria-pressed="true"] .src-ico { background: var(--blue); color: var(--white); }
+.table-row { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(160px, 2fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--paper); }
+.table-row:first-of-type { border-top: 0; }
+.table-row .tname { font-family: var(--font-display); font-weight: 600; color: var(--navy); }
+.drop { border: 1.5px dashed var(--blue-l); border-radius: var(--r-sm); padding: 10px 12px; color: var(--muted); font-size: 13px; background: var(--blue-lp); }
+.mapgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 8px 20px; }
+.maprow { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; font-size: 13px; padding: 6px 0; }
+.maprow code { background: var(--paper); border-radius: 6px; padding: 2px 6px; font-size: 12.5px; color: var(--navy); }
+
+/* Rules editor */
+.rule { display: grid; grid-template-columns: 28px minmax(140px, 1fr) minmax(200px, 2fr) 70px auto; gap: 10px; align-items: center; }
+.rule .ord { font-family: var(--font-display); font-weight: 600; color: var(--blue); }
+.rule .cnt { text-align: right; font-size: 13px; color: var(--muted); }
+.rule .mv { display: flex; gap: 2px; }
+.icon-btn { border: 0; background: transparent; width: 28px; height: 28px; border-radius: 8px; cursor: pointer; color: var(--muted); }
+.icon-btn:hover { background: var(--blue-lp); color: var(--blue); }
+
+/* Data check: trim panel */
+.layout-side { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+.trim { position: sticky; top: 84px; }
+.trim .group { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--paper); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.trim-log { font-size: 12.5px; display: grid; gap: 6px; }
+.trim-log div { display: flex; justify-content: space-between; gap: 10px; }
+
+/* Report */
+.report-head { display: grid; gap: 16px; }
+.filterbar { position: sticky; top: 70px; z-index: 10; background: var(--white); border-radius: var(--r-md); padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; box-shadow: 0 1px 0 var(--line); }
+.filterbar .fl { font-size: 12px; font-weight: 600; color: var(--muted); }
+.filterbar select { border: 1px solid var(--line); border-radius: 999px; padding: 7px 12px; background: var(--white); font-size: 13px; color: var(--navy); font-weight: 500; }
+.filterbar .reset { margin-left: auto; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.tab { border: 0; background: transparent; cursor: pointer; padding: 12px 16px; font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--muted); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.tab[aria-selected="true"] { color: var(--blue); border-bottom-color: var(--blue); }
+.chart { width: 100%; height: 340px; }
+.chart.tall { height: 420px; }
+.how { background: var(--blue-lp); border-radius: var(--r-sm); padding: 12px 14px; font-size: 13px; color: var(--navy); display: grid; gap: 4px; }
+.how b { font-family: var(--font-display); }
+.takeaway { border-left: 0; background: var(--green-lp); border-radius: var(--r-sm); padding: 12px 14px; font-size: 13.5px; color: var(--green-d); }
+.takeaway b { color: var(--green-d); }
+.insights { display: grid; gap: 10px; counter-reset: ins; }
+.insight { display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; font-size: 14px; }
+.insight::before { counter-increment: ins; content: counter(ins, decimal-leading-zero); font-family: var(--font-display); font-weight: 600; color: var(--blue); font-size: 16px; }
+.seg-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.seg-card { background: var(--paper); border-radius: var(--r-md); padding: 16px; display: grid; gap: 6px; }
+.seg-card .nm { font-family: var(--font-display); font-weight: 600; color: var(--navy); display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.seg-card .row { display: flex; gap: 14px; font-size: 13px; }
+.seg-card .row b { font-family: var(--font-display); color: var(--blue); font-size: 18px; }
+.seg-card .act { font-size: 12.5px; color: var(--ink-2); }
+.proto-note { font-size: 12px; color: var(--muted); text-align: center; padding-top: 8px; }
+.view[hidden] { display: none !important; }
+
+@media (max-width: 980px) {
+  .layout-side { grid-template-columns: 1fr; }
+  .trim { position: static; }
+  .stepper { margin-left: 0; width: 100%; }
+  .filterbar { top: 0; position: static; }
+}
+@media (max-width: 640px) {
+  .rule { grid-template-columns: 24px 1fr; }
+  .rule .cond, .rule .cnt, .rule .mv { grid-column: 2; }
+  .table-row { grid-template-columns: 1fr; gap: 6px; }
+  .step { padding: 8px 24px 8px 12px; font-size: 13px; }
+  .chart { height: 300px; }
+}
+</style>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#connect">RFM Studio<span class="dot" aria-hidden="true"></span></a>
+    <div class="run-chip"><span>Run</span><b id="chipClient">Dummy Nordic Retail</b><span>·</span><span>snapshot 2026-11-01</span></div>
+    <nav class="stepper" aria-label="Steps">
+      <button class="step" data-go="connect"><span class="n">01</span>Connect</button>
+      <button class="step" data-go="settings"><span class="n">02</span>Settings</button>
+      <button class="step" data-go="check"><span class="n">03</span>Data check</button>
+      <button class="step" data-go="report"><span class="n">04</span>Report</button>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+<!-- ================= 01 CONNECT ================= -->
+<section class="view stage" id="v-connect" hidden>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Step 01 · Connect</div>
+      <h1>Where is the client's data?</h1>
+      <p class="lead">Pick the source, point each table to it and check the column mapping. Only <b>transactions</b> is required; the other tables unlock more of the report.</p>
+    </div>
+    <div class="actions"><button class="btn btn-primary" data-go="settings">Continue to settings →</button></div>
+  </div>
+
+  <div class="grid g3">
+    <div class="field card"><label for="client">Client name</label><input class="input" id="client" value="Dummy Nordic Retail"><span class="hint">Shown on the report and the share link.</span></div>
+    <button class="card source" aria-pressed="true" data-src="bq">
+      <div class="src-ico">BQ</div>
+      <h3>BigQuery</h3>
+      <p class="muted">Read the tables straight from a dataset. Best for large exports and recurring runs.</p>
+    </button>
+    <button class="card source" aria-pressed="false" data-src="csv">
+      <div class="src-ico">CSV</div>
+      <h3>Upload files</h3>
+      <p class="muted">Drop the CSV files the client sent. Gzipped files work too.</p>
+    </button>
+  </div>
+
+  <div class="card" id="bqForm">
+    <div class="card-head"><div><h3>BigQuery connection</h3><div class="sub">The app's service account needs BigQuery Data Viewer on the dataset.</div></div><span class="pill ok">Connected · 4 tables found</span></div>
+    <div class="grid g3">
+      <div class="field"><label for="bqp">Billing project</label><input class="input" id="bqp" value="precis-analytics"></div>
+      <div class="field"><label for="bqd">Dataset</label><input class="input" id="bqd" value="precis-analytics.rfm_dummy_nordic"></div>
+      <div class="field"><label>&nbsp;</label><button class="btn btn-secondary">Test connection</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head"><div><h3>Tables</h3><div class="sub">Matched by name. Change any of them if the client used different names.</div></div></div>
+    <div>
+      <div class="table-row"><div><div class="tname">Transactions</div><span class="pill crit" style="background:var(--blue-lp);color:var(--blue)">Required</span></div><select class="input"><option>transactions</option></select><span class="pill ok">412,880 rows · 12 cols</span></div>
+      <div class="table-row"><div><div class="tname">Customers</div><span class="muted">Recommended</span></div><select class="input"><option>customers</option></select><span class="pill ok">96,210 rows · 5 cols</span></div>
+      <div class="table-row"><div><div class="tname">Items</div><span class="muted">Optional</span></div><select class="input"><option>items</option></select><span class="pill ok">1.1M rows · 7 cols</span></div>
+      <div class="table-row"><div><div class="tname">FX rates</div><span class="muted">If several currencies</span></div><select class="input"><option>fx_rates</option></select><span class="pill ok">108 rows · 3 cols</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div><h3>Column mapping · transactions</h3><div class="sub">10 of 12 spec columns matched automatically. Map the rest, or leave optional ones empty.</div></div>
+      <div class="seg" role="group" aria-label="Table"><button aria-pressed="true">Transactions</button><button aria-pressed="false">Customers</button><button aria-pressed="false">Items</button><button aria-pressed="false">FX</button></div>
+    </div>
+    <div class="mapgrid" id="mapgrid"></div>
+  </div>
+</section>
+
+<!-- ================= 02 SETTINGS ================= -->
+<section class="view stage" id="v-settings" hidden>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Step 02 · Settings</div>
+      <h1>How should we score and slice it?</h1>
+      <p class="lead">The defaults suit most clients. Keep them unchanged between recurring runs of the same client so results stay comparable.</p>
+    </div>
+    <div class="actions"><button class="btn btn-secondary">Load settings from a previous run</button><button class="btn btn-primary" data-go="check">Run data check →</button></div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head"><div><h3>Analysis window</h3><div class="sub">Recency is counted up to the snapshot date; the day itself is not included.</div></div></div>
+      <div class="grid g2">
+        <div class="field"><label for="snap">Snapshot date</label><input class="input" id="snap" type="date" value="2026-11-01"></div>
+        <div class="field"><label>Lookback window</label><div class="seg" data-seg><button aria-pressed="false">12 m</button><button aria-pressed="true">24 m</button><button aria-pressed="false">36 m</button></div></div>
+      </div>
+      <label class="switch"><input type="checkbox" id="dayafter"> Use the day after the latest transaction instead</label>
+      <div class="field"><label for="cur">Reporting currency</label><select class="input" id="cur"><option>SEK</option><option>NOK</option><option>DKK</option><option>EUR</option><option>USD</option></select><span class="hint">All amounts are converted with the monthly FX table.</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h3>Scoring</h3><div class="sub">R and M use quintiles; F uses fixed bins because most customers buy once or twice.</div></div></div>
+      <div class="field"><label for="fbins">Frequency bins (lowest purchase count for F1–F5)</label><input class="input" id="fbins" value="1, 2, 3, 4, 6"><span class="hint">Means 1 · 2 · 3 · 4–5 · 6+</span></div>
+      <div class="field"><label for="base">Cut-offs</label><select class="input" id="base"><option>Calculate fresh from this data</option><option>Freeze from: Dummy Nordic Retail · 2026-05-01</option></select><span class="hint">Freeze them to track how customers move between segments over time.</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h3>Outliers and B2B</h3><div class="sub">Customers far above the bulk — usually B2B, staff or test accounts.</div></div></div>
+      <div class="field"><label for="oq">Flag above quantile · <span id="oqv" class="num">0.95</span></label><input type="range" id="oq" min="0.9" max="0.999" step="0.001" value="0.95"></div>
+      <div class="field"><label>Handling</label><div class="seg" data-seg><button aria-pressed="true">Exclude, report separately</button><button aria-pressed="false">Keep in scoring</button></div></div>
+      <div class="field"><label for="tol">Items check tolerance · <span id="tolv" class="num">1.0</span> %</label><input type="range" id="tol" min="0" max="10" step="0.5" value="1"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h3>Cohorts</h3><div class="sub">Groups customers by when they first bought and follows them over time.</div></div></div>
+      <div class="grid g2">
+        <div class="field"><label>Cohort size</label><div class="seg" data-seg><button aria-pressed="true">Month</button><button aria-pressed="false">Quarter</button></div></div>
+        <div class="field"><label>Periods to follow</label><div class="seg" data-seg><button aria-pressed="false">6</button><button aria-pressed="true">12</button><button aria-pressed="false">24</button></div></div>
+      </div>
+      <div class="field"><label>Cohort start</label><div class="seg" data-seg><button aria-pressed="true">First-ever purchase</button><button aria-pressed="false">First purchase in window</button></div><span class="hint">First-ever needs <code>first_purchase_date</code> in the customers table, so returning customers don't look new.</span></div>
+      <div class="field"><label>Retention measure</label><div class="seg" data-seg><button aria-pressed="true">Active customers</button><button aria-pressed="false">Revenue</button></div></div>
+    </div>
+
+    <div class="card span-2">
+      <div class="card-head"><div><h3>Segment rules</h3><div class="sub">Checked top to bottom — the first match wins. Use R, F, M (1–5), recency_days, frequency, monetary, has_prior_history.</div></div><button class="btn btn-ghost">+ Add rule</button></div>
+      <div class="grid" id="rules" style="gap:10px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 DATA CHECK ================= -->
+<section class="view stage" id="v-check" hidden>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow">Step 03 · Data check</div>
+      <h1>Is the export fit for RFM?</h1>
+      <p class="lead">Every check ran on the raw tables. Trim the dataset on the right if something looks off, then build the report.</p>
+    </div>
+    <div class="actions"><button class="btn btn-secondary">Download data-quality report</button><button class="btn btn-primary" data-go="report">Build report →</button></div>
+  </div>
+
+  <div class="banner warn"><div class="ico">!</div><div><h4>Data is usable — 6 issues were fixed automatically</h4><p>No critical issues. Mention the recurring warnings (duplicates, uppercase hashes) to the client.</p></div></div>
+
+  <div class="layout-side">
+    <div class="grid">
+      <div class="grid g4" id="checkStats"></div>
+
+      <div class="card">
+        <div class="card-head"><div><h3>Transactions per month</h3><div class="sub">Look for gaps, spikes or a ramp-up that suggests a partial export.</div></div><button class="btn btn-ghost" data-table="c-monthly">View as table</button></div>
+        <div class="chart" id="c-monthly"></div>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <div class="card-head"><div><h3>Identifier coverage</h3><div class="sub">Share of purchases tied to a known customer.</div></div></div>
+          <div class="chart" style="height:260px" id="c-coverage"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div><h3>Order value distribution</h3><div class="sub">Net amount per purchase, reporting currency.</div></div></div>
+          <div class="chart" style="height:260px" id="c-aov"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div><h3>Checks with findings</h3><div class="sub">Sorted by severity. This is the table to share with the client.</div></div></div>
+        <div class="table-wrap"><table class="t" id="dqTable"></table></div>
+      </div>
+    </div>
+
+    <aside class="card trim" aria-label="Trim the dataset">
+      <div><h3>Trim the dataset</h3><div class="sub muted" style="font-size:13px">Applied before scoring. Every trim is logged in the report.</div></div>
+      <div class="group">
+        <span class="label">Date range</span>
+        <div class="grid g2" style="gap:8px"><input class="input" type="month" value="2024-11" aria-label="From"><input class="input" type="month" value="2026-10" aria-label="To"></div>
+      </div>
+      <div class="group"><span class="label">Markets</span><div class="chips" data-chips><button class="chip" aria-pressed="true">SE</button><button class="chip" aria-pressed="true">NO</button><button class="chip" aria-pressed="true">FI</button><button class="chip" aria-pressed="false">DE · 41 rows</button></div></div>
+      <div class="group"><span class="label">Channels</span><div class="chips" data-chips><button class="chip" aria-pressed="true">ecommerce</button><button class="chip" aria-pressed="true">retail</button></div></div>
+      <div class="group"><span class="label">Order value</span><div class="grid g2" style="gap:8px"><input class="input" placeholder="Min" aria-label="Minimum order value" value="1"><input class="input" placeholder="Max" aria-label="Maximum order value" value="250000"></div></div>
+      <div class="group"><label class="switch"><input type="checkbox" checked> Exclude flagged outliers (38)</label><label class="switch"><input type="checkbox"> Exclude staff / test stores</label></div>
+      <div class="group">
+        <span class="label">Trim log</span>
+        <div class="trim-log">
+          <div><span>Market DE removed</span><b class="num">−41</b></div>
+          <div><span>Order value &lt; 1 SEK</span><b class="num">−212</b></div>
+          <div class="muted"><span>Rows kept</span><b class="num">398,604</b></div>
+        </div>
+      </div>
+      <button class="btn btn-primary">Apply and re-check</button>
+    </aside>
+  </div>
+</section>
+
+<!-- ================= 04 REPORT ================= -->
+<section class="view stage" id="v-report" hidden>
+  <div class="report-head">
+    <div class="page-head">
+      <div>
+        <div class="eyebrow">RFM analysis · Dummy Nordic Retail</div>
+        <h1>Customer segmentation report</h1>
+        <p class="lead">Snapshot 2026-11-01 · 24-month window (2024-11-01 → 2026-10-31) · amounts in SEK, net of returns.</p>
+      </div>
+      <div class="actions"><button class="btn btn-secondary">Download CSVs</button><button class="btn btn-primary" id="shareBtn">Create share link</button></div>
+    </div>
+    <div class="filterbar" role="group" aria-label="Filters">
+      <span class="fl">Filter</span>
+      <select id="fMarket" aria-label="Market"><option value="all">All markets</option><option value="SE">Sweden</option><option value="NO">Norway</option><option value="FI">Finland</option></select>
+      <select id="fMedium" aria-label="Channel"><option value="all">All channels</option><option value="ecommerce">Ecommerce only</option><option value="retail">Retail only</option><option value="omni">Omnichannel</option></select>
+      <select id="fLoyalty" aria-label="Loyalty"><option value="all">Members and non-members</option><option value="yes">Loyalty members</option><option value="no">Non-members</option></select>
+      <span class="muted" id="fSummary" style="font-size:12.5px"></span>
+      <button class="btn btn-ghost reset" id="fReset">Reset filters</button>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+      <button class="tab" role="tab" data-tab="segments" aria-selected="false">Segments</button>
+      <button class="tab" role="tab" data-tab="cohorts" aria-selected="false">Cohorts</button>
+      <button class="tab" role="tab" data-tab="markets" aria-selected="false">Markets</button>
+      <button class="tab" role="tab" data-tab="categories" aria-selected="false">Product categories <span class="pill na" style="margin-left:6px">Later</span></button>
+    </div>
+  </div>
+
+  <div class="grid" data-panel="overview">
+    <div class="grid g4" id="ovStats"></div>
+    <div class="grid g2">
+      <div class="card"><div class="card-head"><div><h3>Key insights</h3><div class="sub">Generated from the numbers. Sense-check before sharing.</div></div></div><div class="insights" id="insights"></div></div>
+      <div class="card"><div class="card-head"><div><h3>Share of customers vs share of revenue</h3><div class="sub">By segment</div></div><button class="btn btn-ghost" data-how="h-share">How to read</button></div><div class="how" id="h-share" hidden><b>How to read</b>A revenue bar much longer than the customer bar marks a high-value segment — protect it. A long customer bar with a short revenue bar is a large, low-value group.</div><div class="chart tall" id="c-share"></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><div class="card-head"><div><h3>Revenue concentration</h3><div class="sub">Customers ranked by net revenue</div></div><button class="btn btn-ghost" data-how="h-conc">How to read</button></div><div class="how" id="h-conc" hidden><b>How to read</b>The steeper the curve, the more the business depends on a few customers. Above ~70% for the top 20% means retaining the top tier matters more than acquisition.</div><div class="chart" id="c-conc"></div></div>
+      <div class="card">
+        <div class="card-head"><div><h3>About this data</h3><div class="sub">From the data check in step 03</div></div><span class="pill warn">6 warnings</span></div>
+        <div class="table-wrap"><table class="t">
+          <tbody>
+            <tr><td>Transactions received</td><td class="n">412,880</td></tr>
+            <tr><td>Used after cleaning and trims</td><td class="n">398,604 · 96.5%</td></tr>
+            <tr><td>Purchases tied to a known customer</td><td class="n">76%</td></tr>
+            <tr><td>Retail purchases tied to a customer</td><td class="n">41%</td></tr>
+            <tr><td>Outliers excluded (possible B2B)</td><td class="n">38 · 2.1% of revenue</td></tr>
+            <tr><td>Trims applied</td><td class="n">Market DE · order value &lt; 1 SEK</td></tr>
+          </tbody></table></div>
+        <p class="muted" style="font-size:12.5px">Anonymous retail shoppers are not in the segments, so in-store behaviour is under-represented.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid" data-panel="segments" hidden>
+    <div class="card"><div class="card-head"><div><h3>Segment KPIs</h3><div class="sub">One row per segment. Hover a row to highlight it.</div></div></div><div class="table-wrap"><table class="t" id="segTable"></table></div></div>
+    <div class="grid g2">
+      <div class="card"><div class="card-head"><div><h3>Customers by Recency and Frequency</h3><div class="sub">Hover a cell for revenue per customer</div></div><button class="btn btn-ghost" data-how="h-rf">How to read</button></div><div class="how" id="h-rf" hidden><b>How to read</b>Top-right is the loyal, active core. The bottom row is one-time buyers — turning them into second-time buyers is usually the cheapest growth lever. Top-left cells are valuable customers drifting away.</div><div class="chart" id="c-rf"></div></div>
+      <div class="card"><div class="card-head"><div><h3>Segment map</h3><div class="sub">Bubble size = net revenue</div></div><button class="btn btn-ghost" data-how="h-map">How to read</button></div><div class="how" id="h-map" hidden><b>How to read</b>Right = bought recently, up = buys often. Big bubbles drifting left are revenue at risk.</div><div class="chart" id="c-map"></div></div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Channel mix by segment</h3><div class="sub">Share of customers buying online, in store, or both</div></div><button class="btn btn-ghost" data-how="h-mix">How to read</button></div><div class="how" id="h-mix" hidden><b>How to read</b>Customers who buy in both channels are usually the most valuable. A segment with a large store-only share is hard to reach with online media — check consent and loyalty IDs.</div><div class="chart" id="c-mix"></div></div>
+    <div class="card"><div class="card-head"><div><h3>Segments and suggested actions</h3></div></div><div class="seg-cards" id="segCards"></div></div>
+  </div>
+
+  <div class="grid" data-panel="cohorts" hidden>
+    <div class="grid g4" id="cohStats"></div>
+    <div class="card"><div class="card-head"><div><h3>Retention by acquisition month</h3><div class="sub">Share of each cohort that bought again N months after their first purchase</div></div><button class="btn btn-ghost" data-how="h-coh">How to read</button></div><div class="how" id="h-coh" hidden><b>How to read</b>Each row is the group of customers who first bought in that month. Read across to see how many came back. Compare columns top to bottom: darker lower rows mean newer customers return more often than older ones did.</div><div class="chart tall" id="c-coh"></div></div>
+    <div class="grid g2">
+      <div class="card"><div class="card-head"><div><h3>Revenue per customer over time</h3><div class="sub">Cumulative net revenue per acquired customer, by quarterly cohort</div></div></div><div class="chart" id="c-ltv"></div></div>
+      <div class="card"><div class="card-head"><div><h3>Time to second purchase</h3><div class="sub">Share of new customers who made a 2nd purchase within N days</div></div></div><div class="chart" id="c-second"></div></div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Monthly development</h3><div class="sub">New vs returning customers</div></div><div class="seg" id="trendMetric"><button aria-pressed="true" data-m="revenue">Revenue</button><button aria-pressed="false" data-m="customers">Customers</button><button aria-pressed="false" data-m="aov">AOV</button></div></div><div class="chart tall" id="c-trend"></div></div>
+  </div>
+
+  <div class="grid" data-panel="markets" hidden>
+    <div class="card">
+      <div class="card-head"><div><h3>Markets at a glance</h3><div class="sub">Arrows compare each market with the all-market average</div></div></div>
+      <div class="grid mk-grid" id="mkCards"></div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Market KPIs</h3><div class="sub">Segments with fewer than 30 customers in a market are flagged as too small to read</div></div></div><div class="table-wrap"><table class="t" id="mkTable"></table></div></div>
+    <div class="grid g2">
+      <div class="card"><div class="card-head"><div><h3>Segment share by market</h3><div class="sub">Share of each market's customers in each segment</div></div><button class="btn btn-ghost" data-how="h-mkseg">How to read</button></div><div class="how" id="h-mkseg" hidden><b>How to read</b>Read down a column to see a market's mix. Compare across a row: a market with a much darker cell than the others over- or under-indexes on that segment.</div><div class="chart tall" id="c-mkseg"></div></div>
+      <div class="card"><div class="card-head"><div><h3>Retention by market</h3><div class="sub">Share of new customers active N months after their first purchase</div></div></div><div class="chart tall" id="c-mkret"></div></div>
+    </div>
+  </div>
+
+  <div class="grid" data-panel="categories" hidden>
+    <div class="card" style="justify-items:start">
+      <span class="pill na">Coming later · L3</span>
+      <h2>Product categories</h2>
+      <p class="muted" style="max-width:60ch">Category and sub-category mix per segment, entry categories for new customers and cross-category breadth. Unlocks when the client provides the items table with item_category and item_sub_category.</p>
+    </div>
+  </div>
+</section>
+
+<p class="proto-note">Prototype with example data — numbers are illustrative, not from a client.</p>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js"></script>
+<script>
+// Fallback CDN if the first one is blocked; the real app serves the library itself.
+if (!window.echarts) document.write('<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"><\/script>');
+</script>
+<script>
+/* ---------------- Design tokens for charts ---------------- */
+const T = {
+  blue: "#2846DC", sky: "#5AB9FF", green: "#00A000", purple: "#AA91E1",
+  navy: "#143255", muted: "#879191", line: "#DCE3E2", paper: "#F6F5F1", lp: "#EBF3FC", l: "#C8E1FF", ink2: "#323737",
+  seq: ["#EBF3FC", "#C8E1FF", "#7A9BEA", "#2846DC", "#143255"],
+};
+const SERIES = [T.blue, T.sky, T.green, T.purple]; // validated order (adjacent CVD ≥ 15)
+const font = "Inter, 'Segoe UI', system-ui, sans-serif";
+const base = () => ({
+  textStyle: { fontFamily: font, color: T.ink2 },
+  grid: { left: 8, right: 16, top: 40, bottom: 8, containLabel: true },
+  tooltip: { backgroundColor: "#fff", borderColor: T.line, borderWidth: 1, padding: [10, 12],
+    textStyle: { color: T.navy, fontFamily: font, fontSize: 12.5 }, extraCssText: "border-radius:12px;box-shadow:0 6px 24px rgba(20,50,85,.12)" },
+  legend: { top: 0, left: 0, icon: "roundRect", itemWidth: 12, itemHeight: 12, textStyle: { color: T.navy, fontSize: 12.5 } },
+  animationDuration: 400,
+});
+const axis = (extra = {}) => ({ axisLine: { lineStyle: { color: T.line } }, axisTick: { show: false }, axisLabel: { color: T.muted, fontSize: 11.5 }, splitLine: { lineStyle: { color: T.paper } }, ...extra });
+
+/* ---------------- Example data (deterministic) ---------------- */
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const fmt = (v, d = 0) => v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+const money = v => { const a = Math.abs(v); return (a >= 1e6 ? fmt(v / 1e6, 1) + "M" : a >= 1e4 ? fmt(v / 1e3, 0) + "k" : fmt(v)) + " SEK"; };
+const pct = (v, d = 0) => fmt(v * 100, d) + "%";
+
+const SEGMENTS = [
+  { name: "Champions", c: 6200, rpc: 14800, f: 7.4, rec: 21, act: "Reward, early access, referral; protect from discounting." },
+  { name: "Loyal High Value", c: 4100, rpc: 9800, f: 5.6, rec: 64, act: "Loyalty benefits, upsell premium ranges." },
+  { name: "At Risk High Value", c: 3300, rpc: 8200, f: 4.1, rec: 412, act: "Win-back with personalised offers; highest revenue at stake." },
+  { name: "New Customers", c: 11800, rpc: 1450, f: 1, rec: 38, act: "Onboarding flow, second-purchase incentive." },
+  { name: "Reactivated", c: 2900, rpc: 1620, f: 1, rec: 44, act: "Re-engage quickly to rebuild the habit." },
+  { name: "Potential Loyalists", c: 9400, rpc: 3900, f: 2.4, rec: 52, act: "Cross-sell, membership invitation." },
+  { name: "Needs Attention", c: 14100, rpc: 2700, f: 1.9, rec: 198, act: "Reminders, recommendations, limited-time offers." },
+  { name: "Hibernating", c: 34300, rpc: 1350, f: 1.3, rec: 488, act: "Low-cost reactivation or suppress to save budget." },
+];
+const FACT = { market: { all: 1, SE: .56, NO: .26, FI: .18 }, medium: { all: 1, ecommerce: .62, retail: .27, omni: .11 }, loyalty: { all: 1, yes: .34, no: .66 } };
+// segment-specific tilt per filter so filtered views differ in shape, not just scale
+const tilt = SEGMENTS.map(() => ({ SE: .9 + rnd() * .2, NO: .85 + rnd() * .3, FI: .8 + rnd() * .4, ecommerce: .9 + rnd() * .2, retail: .7 + rnd() * .6, omni: .6 + rnd() * .9, yes: .5 + rnd() * 1.2, no: .8 + rnd() * .4 }));
+const state = { market: "all", medium: "all", loyalty: "all", trend: "revenue" };
+
+function segData() {
+  return SEGMENTS.map((s, i) => {
+    let k = FACT.market[state.market] * FACT.medium[state.medium] * FACT.loyalty[state.loyalty];
+    for (const key of [state.market, state.medium, state.loyalty]) if (key !== "all") k *= tilt[i][key];
+    const rpcK = state.loyalty === "yes" ? 1.25 : state.medium === "omni" ? 1.5 : 1;
+    const customers = Math.round(s.c * k);
+    return { ...s, customers, revenue: customers * s.rpc * rpcK, rpc: s.rpc * rpcK };
+  });
+}
+
+/* ---------------- Charts registry ---------------- */
+const charts = {};
+function chart(id, option) {
+  const el = document.getElementById(id); if (!el || !el.getClientRects().length || !window.echarts) return;
+  if (!charts[id]) { charts[id] = echarts.init(el, null, { renderer: "svg" }); new ResizeObserver(() => charts[id].resize()).observe(el); }
+  charts[id].setOption(option, true);
+}
+window.addEventListener("resize", () => Object.values(charts).forEach(c => c.resize()));
+
+/* ---------------- 01 Connect ---------------- */
+const MAP = [["transaction_id", "OrderID", "ok"], ["transaction_date", "OrderDate", "ok"], ["hashed_email", "email_sha256", "ok"], ["customer_id", "customer_id", "ok"],
+  ["transaction_amount", "TotalExTax", "ok"], ["transaction_type", "type", "ok"], ["currency", "OrderCurrency", "ok"], ["market", "Country", "ok"],
+  ["medium", "channel", "ok"], ["store_id", "store_id", "ok"], ["original_transaction_id", null, "na"], ["basket_size", null, "na"]];
+document.getElementById("mapgrid").innerHTML = MAP.map(([spec, col, st]) =>
+  `<div class="maprow"><code>${spec}</code><span class="muted">←</span>${col ? `<select class="input" aria-label="${spec}"><option>${col}</option></select>` : `<select class="input" aria-label="${spec}"><option>Not provided</option></select>`}</div>`).join("");
+document.querySelectorAll("[data-src]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-src]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  document.getElementById("bqForm").hidden = b.dataset.src !== "bq";
+}));
+document.getElementById("client").addEventListener("input", e => document.getElementById("chipClient").textContent = e.target.value || "Client");
+
+/* ---------------- 02 Settings ---------------- */
+const RULES = [["Champions", "R >= 4 and F >= 4 and M >= 4", 6200], ["Loyal High Value", "R >= 3 and F >= 4 and M >= 4", 4100], ["At Risk High Value", "R <= 2 and F >= 3 and M >= 4", 3300],
+  ["New Customers", "R >= 4 and F == 1 and not has_prior_history", 11800], ["Reactivated", "R >= 4 and F == 1 and has_prior_history", 2900], ["Potential Loyalists", "R >= 4", 9400],
+  ["Needs Attention", "R == 3", 14100], ["Hibernating", "R <= 2", 34300]];
+document.getElementById("rules").innerHTML = RULES.map(([n, r, c], i) =>
+  `<div class="rule"><span class="ord">${String(i + 1).padStart(2, "0")}</span><input class="input" aria-label="Segment name" value="${n}"><input class="input cond" aria-label="Condition" value="${r}"><span class="cnt num">${fmt(c)}</span><span class="mv"><button class="icon-btn" aria-label="Move up">↑</button><button class="icon-btn" aria-label="Move down">↓</button><button class="icon-btn" aria-label="Remove">✕</button></span></div>`).join("");
+document.querySelectorAll("[data-seg]").forEach(g => g.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; g.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); }));
+document.querySelectorAll("[data-chips]").forEach(g => g.addEventListener("click", e => { const b = e.target.closest("button"); if (b) b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true"); }));
+for (const [id, out, d] of [["oq", "oqv", 3], ["tol", "tolv", 1]]) document.getElementById(id).addEventListener("input", e => document.getElementById(out).textContent = (+e.target.value).toFixed(d));
+
+/* ---------------- 03 Data check ---------------- */
+const stat = (k, v, s, cls = "") => `<div class="stat ${cls}"><div class="k">${k}</div><div><div class="v">${v}</div><div class="s">${s}</div></div></div>`;
+document.getElementById("checkStats").innerHTML =
+  stat("Rows received", "412.9k", "transactions table", "lp") + stat("Rows used", "96.5%", "398.6k clean and identified", "hl") +
+  stat("Customers", "90.1k", "with a purchase in the window") + stat("Critical issues", "0", "6 warnings · 7 info", "lt");
+const DQ = [["warning", "transactions", "exact duplicate rows", 1204, "Removed"], ["warning", "transactions", "hashed_email in uppercase", 3311, "Lowercased"],
+  ["warning", "transactions", "return with positive amount", 418, "Sign flipped to negative"], ["warning", "items", "transaction_amount ≠ sum of item lines (>1%)", 2190, "Transaction amount used"],
+  ["warning", "customers", "outlier / possible B2B", 38, "Excluded and reported separately"], ["warning", "transactions", "currency missing", 96, "Filled from the market's main currency"],
+  ["info", "transactions", "transaction without identifier (anonymous)", 9870, "Excluded from RFM"], ["info", "identity", "rows linked via customer_id → email", 21450, "Merged into one customer"],
+  ["info", "transactions", "date before window start", 52310, "Outside window; removed"]];
+const dqHtml = `<thead><tr><th>Severity</th><th>Table</th><th>Check</th><th class="n">Rows</th><th>What the app did</th></tr></thead><tbody>` +
+  DQ.map(([s, t, c, n, a]) => `<tr><td><span class="pill ${s === "warning" ? "warn" : s === "critical" ? "crit" : "info"}">${s}</span></td><td>${t}</td><td>${c}</td><td class="n">${fmt(n)}</td><td class="muted">${a}</td></tr>`).join("") + "</tbody>";
+document.getElementById("dqTable").innerHTML = dqHtml;
+
+const MONTHS = Array.from({ length: 24 }, (_, i) => { const d = new Date(2024, 10 + i, 1); return d.toISOString().slice(0, 7); });
+const season = i => 1 + .35 * Math.max(0, Math.cos((i - 1) / 12 * 2 * Math.PI)) + (i % 12 === 0 ? .25 : 0);
+const txByMonth = MONTHS.map((m, i) => Math.round(15200 * season(i) * (1 + i * .012) * (.92 + rnd() * .16)));
+function drawCheck() {
+  chart("c-monthly", { ...base(), legend: { show: false },
+    tooltip: { ...base().tooltip, trigger: "axis", axisPointer: { type: "shadow", shadowStyle: { color: "rgba(40,70,220,.06)" } }, valueFormatter: v => fmt(v) + " transactions" },
+    xAxis: axis({ type: "category", data: MONTHS, axisLabel: { color: T.muted, fontSize: 11.5, formatter: v => v.slice(5) === "01" || v === MONTHS[0] ? v : v.slice(5) } }),
+    yAxis: axis({ type: "value", axisLabel: { color: T.muted, fontSize: 11.5, formatter: v => fmt(v / 1000) + "k" } }),
+    series: [{ type: "bar", data: txByMonth, barMaxWidth: 26, itemStyle: { color: T.blue, borderRadius: [4, 4, 0, 0] } }] });
+  const cov = [["Ecommerce", .99], ["Retail", .41], ["All purchases", .76]];
+  chart("c-coverage", { ...base(), legend: { show: false }, grid: { left: 8, right: 48, top: 8, bottom: 8, containLabel: true },
+    tooltip: { ...base().tooltip, trigger: "item", formatter: p => `${p.name}<br><b>${pct(p.value)}</b> of purchases identified` },
+    xAxis: axis({ type: "value", max: 1, axisLabel: { show: false }, splitLine: { show: false } }),
+    yAxis: axis({ type: "category", data: cov.map(c => c[0]), axisLine: { show: false }, axisLabel: { color: T.navy, fontSize: 12.5 } }),
+    series: [{ type: "bar", data: cov.map(c => c[1]), barWidth: 22, itemStyle: { color: T.blue, borderRadius: [0, 4, 4, 0] }, showBackground: true, backgroundStyle: { color: T.lp, borderRadius: 4 },
+      label: { show: true, position: "right", color: T.navy, fontWeight: 600, formatter: p => pct(p.value) } }] });
+  const bins = ["<250", "250–500", "500–1k", "1k–2k", "2k–4k", "4k–8k", "8k+"], vals = [6, 14, 27, 26, 16, 8, 3];
+  chart("c-aov", { ...base(), legend: { show: false }, tooltip: { ...base().tooltip, trigger: "axis", axisPointer: { type: "shadow", shadowStyle: { color: "rgba(40,70,220,.06)" } }, valueFormatter: v => v + "% of purchases" },
+    xAxis: axis({ type: "category", data: bins }), yAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: "{value}%" } }),
+    series: [{ type: "bar", data: vals, barMaxWidth: 34, itemStyle: { color: T.blue, borderRadius: [4, 4, 0, 0] } }] });
+}
+
+/* ---------------- 04 Report ---------------- */
+function drawOverview() {
+  const d = segData(), C = d.reduce((a, s) => a + s.customers, 0), R = d.reduce((a, s) => a + s.revenue, 0);
+  const champ = d[0], repeat = d.filter(s => s.f > 1).reduce((a, s) => a + s.customers, 0) / C;
+  document.getElementById("ovStats").innerHTML =
+    stat("Customers scored", fmt(C), "last 24 months", "lp") + stat("Net revenue", money(R), "after returns", "hl") +
+    stat(`Revenue per customer`, money(R / C), "2.1 purchases on average") + stat(`Repeat rate <span class="tri up">▲</span>`, pct(repeat), "bought 2+ times", "lt");
+  const top = d.slice(0, 2).reduce((a, s) => a + s.revenue, 0) / R;
+  document.getElementById("insights").innerHTML = [
+    `<b>${fmt(C)} customers</b> generated <b>${money(R)}</b> net revenue in the last 24 months.`,
+    `<b>Champions</b> are ${pct(champ.customers / C)} of customers but <b>${pct(champ.revenue / R)}</b> of revenue — ${fmt(champ.rpc / (R / C), 1)}× the average customer.`,
+    `<b>High-value core</b> (Champions + Loyal High Value): ${pct((d[0].customers + d[1].customers) / C)} of customers, ${pct(top)} of revenue.`,
+    `<b>At Risk High Value:</b> ${fmt(d[2].customers)} customers worth ${money(d[2].revenue)} haven't bought for a median of ${d[2].rec} days — the main win-back target.`,
+    `<b>New Customers:</b> ${fmt(d[3].customers)} first-time buyers in the last ~60 days. Converting them to a second order is the cheapest growth lever.`,
+  ].map(t => `<div class="insight"><div>${t}</div></div>`).join("");
+  const rev = [...d].reverse();
+  chart("c-share", { ...base(), grid: { left: 8, right: 44, top: 40, bottom: 8, containLabel: true },
+    tooltip: { ...base().tooltip, trigger: "axis", axisPointer: { type: "shadow", shadowStyle: { color: "rgba(40,70,220,.06)" } }, valueFormatter: v => pct(v, 1) },
+    xAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: v => pct(v) } }),
+    yAxis: axis({ type: "category", data: rev.map(s => s.name), axisLine: { show: false }, axisLabel: { color: T.navy, fontSize: 12.5 } }),
+    series: [
+      { name: "Share of customers", type: "bar", data: rev.map(s => s.customers / C), barWidth: 10, barGap: "25%", itemStyle: { color: T.sky, borderRadius: [0, 4, 4, 0] }, label: { show: true, position: "right", color: T.ink2, fontSize: 11, formatter: p => pct(p.value) } },
+      { name: "Share of revenue", type: "bar", data: rev.map(s => s.revenue / R), barWidth: 10, itemStyle: { color: T.blue, borderRadius: [0, 4, 4, 0] }, label: { show: true, position: "right", color: T.navy, fontWeight: 600, fontSize: 11, formatter: p => pct(p.value) } },
+    ] });
+}
+
+function drawSegments() {
+  const d = segData(), C = d.reduce((a, s) => a + s.customers, 0), R = d.reduce((a, s) => a + s.revenue, 0), maxShare = Math.max(...d.map(s => s.revenue / R));
+  document.getElementById("segTable").innerHTML = `<thead><tr><th>Segment</th><th class="n">Customers</th><th class="n">Customer share</th><th class="n">Revenue share</th><th class="n">Net revenue</th><th class="n">Revenue / customer</th><th class="n">Avg purchases</th><th class="n">Median days since</th></tr></thead><tbody>` +
+    d.map(s => `<tr><td><b>${s.name}</b></td><td class="n">${fmt(s.customers)}</td><td class="n">${pct(s.customers / C, 1)}</td><td class="n"><div class="bar-cell"><i style="width:${70 * (s.revenue / R) / maxShare}px"></i>${pct(s.revenue / R, 1)}</div></td><td class="n">${money(s.revenue)}</td><td class="n">${fmt(s.rpc)}</td><td class="n">${fmt(s.f, 1)}</td><td class="n">${s.rec}</td></tr>`).join("") +
+    `<tr class="total"><td>Total</td><td class="n">${fmt(C)}</td><td class="n">100%</td><td class="n">100%</td><td class="n">${money(R)}</td><td class="n">${fmt(R / C)}</td><td class="n">2.1</td><td class="n">167</td></tr></tbody>`;
+  const k = C / 90100, rf = [];
+  const base5 = [[310, 520, 900, 1700, 2300], [240, 480, 820, 1500, 1900], [600, 900, 1400, 2400, 3100], [1100, 1700, 2600, 3900, 4400], [9800, 8200, 7100, 6900, 6400]];
+  base5.forEach((row, fi) => row.forEach((v, ri) => rf.push([ri, fi, Math.round(v * k), Math.round(900 + ri * 600 + (4 - fi) * 2100)])));
+  chart("c-rf", { ...base(), grid: { left: 8, right: 8, top: 8, bottom: 56, containLabel: true },
+    tooltip: { ...base().tooltip, formatter: p => `R${p.value[0] + 1} · F${5 - p.value[1]}<br>Customers: <b>${fmt(p.value[2])}</b><br>Revenue / customer: <b>${fmt(p.value[3])} SEK</b>` },
+    xAxis: axis({ type: "category", data: ["R1", "R2", "R3", "R4", "R5"], name: "Recency score (5 = most recent)", nameLocation: "middle", nameGap: 28, nameTextStyle: { color: T.muted }, splitArea: { show: false } }),
+    yAxis: axis({ type: "category", data: ["F5", "F4", "F3", "F2", "F1"], axisLine: { show: false } }),
+    visualMap: { show: false, min: 0, max: Math.max(...rf.map(r => r[2])), dimension: 2, inRange: { color: T.seq } },
+    series: [{ type: "heatmap", data: rf.map(x => ({ value: x, label: { color: x[2] > 0.6 * Math.max(...rf.map(y => y[2])) ? "#fff" : T.navy } })), itemStyle: { borderColor: "#fff", borderWidth: 3, borderRadius: 6 },
+      label: { show: true, fontSize: 11.5, formatter: p => fmt(p.value[2]) }, emphasis: { itemStyle: { borderColor: T.navy, borderWidth: 2 } } }] });
+  const maxR = Math.max(...d.map(s => s.revenue));
+  chart("c-map", { ...base(), grid: { left: 8, right: 24, top: 24, bottom: 40, containLabel: true },
+    tooltip: { ...base().tooltip, formatter: p => `<b>${p.data.name}</b><br>Median days since purchase: ${p.data.value[0]}<br>Avg purchases: ${fmt(p.data.value[1], 1)}<br>Revenue share: ${pct(p.data.value[2] / R, 1)}` },
+    xAxis: axis({ type: "value", inverse: true, name: "Median days since last purchase (recent →)", nameLocation: "middle", nameGap: 28, nameTextStyle: { color: T.muted } }),
+    yAxis: axis({ type: "value", name: "Avg purchases", nameTextStyle: { color: T.muted, align: "left" } }),
+    series: [{ type: "scatter", data: d.map(s => ({ name: s.name, value: [s.rec, s.f, s.revenue] })), symbolSize: v => 12 + Math.sqrt(v[2] / maxR) * 60,
+      itemStyle: { color: "rgba(40,70,220,.78)", borderColor: "#fff", borderWidth: 2 },
+      label: { show: true, formatter: p => p.data.name, position: "top", color: T.navy, fontSize: 11.5, fontWeight: 600 }, labelLayout: { hideOverlap: true } }] });
+  document.getElementById("segCards").innerHTML = d.map(s => `<div class="seg-card"><div class="nm">${s.name}<span class="pill info">${pct(s.customers / C)}</span></div><div class="row"><span><b>${pct(s.revenue / R)}</b> revenue</span><span><b>${fmt(s.f, 1)}</b> orders</span></div><div class="act">${s.act}</div></div>`).join("");
+}
+
+function drawCohorts() {
+  const k = segData().reduce((a, s) => a + s.customers, 0) / 90100;
+  document.getElementById("cohStats").innerHTML = stat("New customers acquired", fmt(Math.round(41200 * k)), "first-ever purchase in the window", "lp") +
+    stat("Came back within 90 days", "18%", "made a 2nd purchase", "hl") + stat("Month-12 retention", "9.4%", "median across cohorts") + stat(`Median time to 2nd order`, "71 days", "for those who returned", "lt");
+  const cohorts = MONTHS.slice(0, 18), data = [];
+  cohorts.forEach((c, ci) => { for (let p = 1; p <= 12 && ci + p < 24; p++) { const v = (0.21 * Math.pow(p, -0.55) + 0.02 + ci * 0.0016) * (0.9 + rnd() * 0.2); data.push([p - 1, ci, +(v * 100).toFixed(1), Math.round((1800 + rnd() * 900) * k)]); } });
+  chart("c-coh", { ...base(), grid: { left: 8, right: 8, top: 8, bottom: 40, containLabel: true },
+    tooltip: { ...base().tooltip, formatter: p => `Cohort <b>${cohorts[p.value[1]]}</b> · month ${p.value[0] + 1}<br><b>${p.value[2]}%</b> of ${fmt(p.value[3])} customers bought again` },
+    xAxis: axis({ type: "category", data: Array.from({ length: 12 }, (_, i) => "M" + (i + 1)), name: "Months after first purchase", nameLocation: "middle", nameGap: 26, nameTextStyle: { color: T.muted } }),
+    yAxis: axis({ type: "category", data: cohorts, inverse: true, axisLine: { show: false } }),
+    visualMap: { show: false, min: 0, max: Math.max(...data.map(x => x[2])), dimension: 2, inRange: { color: T.seq } },
+    series: [{ type: "heatmap", data: data.map(x => ({ value: x, label: { color: x[2] > 0.6 * Math.max(...data.map(y => y[2])) ? "#fff" : T.navy } })), itemStyle: { borderColor: "#fff", borderWidth: 2, borderRadius: 4 }, label: { show: true, fontSize: 10.5, formatter: p => p.value[2].toFixed(0) } }] });
+  const qs = ["2024 Q4", "2025 Q1", "2025 Q2", "2025 Q3"];
+  chart("c-ltv", { ...base(), tooltip: { ...base().tooltip, trigger: "axis", valueFormatter: v => v == null ? "–" : fmt(v) + " SEK" },
+    xAxis: axis({ type: "category", data: Array.from({ length: 13 }, (_, i) => "M" + i), boundaryGap: false }), yAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: v => fmt(v / 1000, 1) + "k" } }),
+    series: qs.map((q, i) => ({ name: q, type: "line", smooth: true, symbol: "circle", symbolSize: 6, lineStyle: { width: 2 }, color: SERIES[i],
+      data: Array.from({ length: 13 }, (_, m) => m > 12 - i * 3 ? null : Math.round((1450 + 260 * Math.log1p(m) * (1 + i * .06)) * (state.loyalty === "yes" ? 1.3 : 1))),
+    })) });
+  const days = [7, 14, 30, 60, 90, 180, 365], share = [.03, .055, .09, .135, .18, .245, .31];
+  chart("c-second", { ...base(), legend: { show: false }, tooltip: { ...base().tooltip, trigger: "axis", valueFormatter: v => pct(v, 1) },
+    xAxis: axis({ type: "category", data: days.map(d => d + " d"), boundaryGap: false }), yAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: v => pct(v) } }),
+    series: [{ type: "line", data: share, smooth: true, symbol: "circle", symbolSize: 8, color: T.blue, lineStyle: { width: 2 }, areaStyle: { color: "rgba(40,70,220,.08)" },
+      markPoint: { symbol: "circle", symbolSize: 10, data: [{ coord: ["90 d", .18], value: "18% by day 90" }], label: { show: true, position: "top", color: T.navy, fontWeight: 600, formatter: "18% by day 90" }, itemStyle: { color: T.blue, borderColor: "#fff", borderWidth: 2 } } }] });
+}
+
+function drawTrend() {
+  const k = segData().reduce((a, s) => a + s.customers, 0) / 90100, m = state.trend;
+  const ret = MONTHS.map((_, i) => txByMonth[i] * 1050 * k * .62), neu = MONTHS.map((_, i) => txByMonth[i] * 1050 * k * .38 * (1.1 - i * .01));
+  let series, yfmt, tf;
+  if (m === "aov") {
+    const aov = MONTHS.map((_, i) => 1180 + 90 * Math.sin(i / 2) + i * 6);
+    series = [{ name: "AOV", type: "line", data: aov.map(Math.round), smooth: true, symbol: "circle", symbolSize: 6, color: T.blue, lineStyle: { width: 2 }, areaStyle: { color: "rgba(40,70,220,.08)" } }];
+    yfmt = v => fmt(v); tf = v => fmt(v) + " SEK";
+  } else {
+    const div = m === "customers" ? 1900 : 1;
+    series = [["Returning customers", ret, T.blue], ["New customers", neu, T.sky]].map(([n, arr, c], i) => ({ name: n, type: "bar", stack: "t", data: arr.map(v => Math.round(v / div)), barMaxWidth: 26, color: c,
+      itemStyle: { borderColor: "#fff", borderWidth: 1, borderRadius: i === 1 ? [4, 4, 0, 0] : 0 } }));
+    yfmt = v => m === "customers" ? fmt(v / 1000, 1) + "k" : fmt(v / 1e6, 0) + "M"; tf = v => m === "customers" ? fmt(v) + " customers" : money(v);
+  }
+  chart("c-trend", { ...base(), tooltip: { ...base().tooltip, trigger: "axis", axisPointer: { type: m === "aov" ? "line" : "shadow", shadowStyle: { color: "rgba(40,70,220,.06)" } }, valueFormatter: tf },
+    xAxis: axis({ type: "category", data: MONTHS, axisLabel: { color: T.muted, fontSize: 11.5, formatter: v => v.slice(5) === "01" || v === MONTHS[0] ? v : v.slice(5) } }),
+    yAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: yfmt } }), series });
+}
+function drawConc() {
+  const xs = Array.from({ length: 41 }, (_, i) => i / 40), ys = xs.map(x => 1 - Math.pow(1 - x, 3.1));
+  chart("c-conc", { ...base(), legend: { show: false }, grid: { left: 8, right: 24, top: 24, bottom: 40, containLabel: true },
+    tooltip: { ...base().tooltip, trigger: "axis", formatter: p => `Top ${pct(+p[0].axisValue)} of customers → <b>${pct(p[0].value)}</b> of revenue` },
+    xAxis: axis({ type: "category", data: xs.map(x => x.toFixed(3)), boundaryGap: false, axisLabel: { color: T.muted, interval: 9, formatter: v => pct(+v) }, name: "Share of customers (ranked by revenue)", nameLocation: "middle", nameGap: 28, nameTextStyle: { color: T.muted } }),
+    yAxis: axis({ type: "value", max: 1, axisLabel: { color: T.muted, formatter: v => pct(v) } }),
+    series: [{ type: "line", data: ys, symbol: "none", smooth: true, color: T.blue, lineStyle: { width: 2 }, areaStyle: { color: "rgba(40,70,220,.08)" },
+      markPoint: { symbol: "circle", symbolSize: 10, itemStyle: { color: T.blue, borderColor: "#fff", borderWidth: 2 }, data: [{ coord: ["0.200", ys[8]] }], label: { show: true, position: "right", color: T.navy, fontWeight: 600, formatter: `Top 20% → ${pct(ys[8])}` } } }] });
+}
+function drawMix() {
+  const d = segData(), mix = d.map((s, i) => { const o = .05 + (i < 2 ? .22 : .04) + tilt[i].omni * .03, r = .18 + tilt[i].retail * .08; return [1 - o - r, r, o]; });
+  chart("c-mix", { ...base(), grid: { left: 8, right: 16, top: 40, bottom: 8, containLabel: true },
+    tooltip: { ...base().tooltip, trigger: "axis", axisPointer: { type: "shadow", shadowStyle: { color: "rgba(40,70,220,.06)" } }, valueFormatter: v => pct(v) },
+    xAxis: axis({ type: "value", max: 1, axisLabel: { color: T.muted, formatter: v => pct(v) } }),
+    yAxis: axis({ type: "category", data: d.map(s => s.name).reverse(), axisLine: { show: false }, axisLabel: { color: T.navy, fontSize: 12 } }),
+    series: ["Online only", "Store only", "Both"].map((n, j) => ({ name: n, type: "bar", stack: "m", barWidth: 16, color: SERIES[j], data: mix.map(x => x[j]).reverse(),
+      itemStyle: { borderColor: "#fff", borderWidth: 2, borderRadius: j === 2 ? [0, 4, 4, 0] : 0 } })) });
+}
+
+const MARKETS = [
+  { code: "SE", name: "Sweden", share: .56, rpc: 3650, repeat: .35, aov: 1210, ret: .071, color: T.blue },
+  { code: "NO", name: "Norway", share: .26, rpc: 3420, repeat: .31, aov: 1295, ret: .084, color: T.sky },
+  { code: "FI", name: "Finland", share: .18, rpc: 3120, repeat: .29, aov: 1140, ret: .062, color: T.green },
+];
+function drawMarkets() {
+  const d = segData(), C = d.reduce((a, s) => a + s.customers, 0);
+  const avg = { rpc: 3506, repeat: .33, aov: 1215 };
+  const arrow = (v, a) => v >= a ? '<span class="tri up">▲</span>' : '<span class="tri down">▼</span>';
+  const ms = MARKETS.filter(m => state.market === "all" || m.code === state.market);
+  document.getElementById("mkCards").innerHTML = ms.map((m, i) =>
+    stat(`${m.name} · customers`, fmt(Math.round(C * (state.market === "all" ? m.share : 1))), `${pct(state.market === "all" ? m.share : 1)} of all customers`, "lp") +
+    stat(`${m.name} · revenue / customer ${arrow(m.rpc, avg.rpc)}`, fmt(m.rpc) + " SEK", `${m.rpc >= avg.rpc ? "+" : ""}${pct(m.rpc / avg.rpc - 1)} vs average`, i === 0 ? "hl" : "") +
+    stat(`${m.name} · repeat rate ${arrow(m.repeat, avg.repeat)}`, pct(m.repeat), "bought 2+ times", "lt")).join("");
+  document.getElementById("mkTable").innerHTML = `<thead><tr><th>Market</th><th class="n">Customers</th><th class="n">Net revenue</th><th class="n">Revenue / customer</th><th class="n">AOV</th><th class="n">Repeat rate</th><th class="n">Return rate</th><th>Small segments</th></tr></thead><tbody>` +
+    ms.map(m => { const c = Math.round(C * (state.market === "all" ? m.share : 1)); return `<tr><td><span class="swatch" style="background:${m.color}"></span><b>${m.name}</b></td><td class="n">${fmt(c)}</td><td class="n">${money(c * m.rpc)}</td><td class="n">${fmt(m.rpc)}</td><td class="n">${fmt(m.aov)}</td><td class="n">${pct(m.repeat)}</td><td class="n">${pct(m.ret, 1)}</td><td>${m.code === "FI" ? '<span class="pill warn">Reactivated · 24</span>' : '<span class="pill ok">none</span>'}</td></tr>`; }).join("") + "</tbody>";
+  const cells = [];
+  d.forEach((s, si) => ms.forEach((m, mi) => { const v = s.c / 90100 * (0.8 + tilt[si][m.code] * 0.25) * 100; cells.push([mi, si, +v.toFixed(1)]); }));
+  const mx = Math.max(...cells.map(c => c[2]));
+  chart("c-mkseg", { ...base(), grid: { left: 8, right: 8, top: 8, bottom: 8, containLabel: true },
+    tooltip: { ...base().tooltip, formatter: p => `${ms[p.value[0]].name} · ${d[p.value[1]].name}<br><b>${p.value[2]}%</b> of the market's customers` },
+    xAxis: axis({ type: "category", data: ms.map(m => m.name), position: "top", axisLine: { show: false }, axisLabel: { color: T.navy, fontWeight: 600 } }),
+    yAxis: axis({ type: "category", data: d.map(s => s.name), inverse: true, axisLine: { show: false }, axisLabel: { color: T.navy } }),
+    visualMap: { show: false, min: 0, max: mx, dimension: 2, inRange: { color: T.seq } },
+    series: [{ type: "heatmap", data: cells.map(x => ({ value: x, label: { color: x[2] > .6 * mx ? "#fff" : T.navy } })), itemStyle: { borderColor: "#fff", borderWidth: 3, borderRadius: 6 }, label: { show: true, formatter: p => p.value[2].toFixed(0) + "%" } }] });
+  const months = Array.from({ length: 12 }, (_, i) => "M" + (i + 1));
+  chart("c-mkret", { ...base(), tooltip: { ...base().tooltip, trigger: "axis", valueFormatter: v => pct(v, 1) },
+    xAxis: axis({ type: "category", data: months, boundaryGap: false }), yAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: v => pct(v) } }),
+    series: ms.map((m, i) => ({ name: m.name, type: "line", smooth: true, symbol: "circle", symbolSize: 6, color: m.color, lineStyle: { width: 2 },
+      data: months.map((_, t) => +(0.22 * Math.pow(t + 1, -0.5) * (1 - i * 0.12) + 0.03).toFixed(3)) })) });
+}
+
+/* ---------------- Wiring: steps, tabs, filters ---------------- */
+const ORDER = ["connect", "settings", "check", "report"];
+const tabDraw = { overview: () => { drawOverview(); drawConc(); }, segments: () => { drawSegments(); drawMix(); }, cohorts: () => { drawCohorts(); drawTrend(); }, markets: drawMarkets, categories: () => {} };
+let tab = "overview";
+function route() {
+  const v = ORDER.includes(location.hash.slice(1)) ? location.hash.slice(1) : "report";
+  ORDER.forEach(id => document.getElementById("v-" + id).hidden = id !== v);
+  document.querySelectorAll(".step").forEach(s => { const i = ORDER.indexOf(s.dataset.go); s.classList.toggle("active", i === ORDER.indexOf(v)); s.classList.toggle("done", i < ORDER.indexOf(v)); });
+  if (v === "check") drawCheck();
+  if (v === "report") tabDraw[tab]();
+  window.scrollTo({ top: 0 });
+}
+document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", e => { e.preventDefault(); location.hash = b.dataset.go; }));
+window.addEventListener("hashchange", route);
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
+  tab = t.dataset.tab;
+  document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
+  document.querySelectorAll("[data-panel]").forEach(p => p.hidden = p.dataset.panel !== tab);
+  tabDraw[tab]();
+}));
+document.querySelectorAll("[data-how]").forEach(b => b.addEventListener("click", () => { const h = document.getElementById(b.dataset.how); h.hidden = !h.hidden; b.textContent = h.hidden ? "How to read" : "Hide explanation"; }));
+document.querySelectorAll("[data-table]").forEach(b => b.addEventListener("click", () => { b.textContent = "Table view comes with the real build"; }));
+function filtersChanged() {
+  state.market = fMarket.value; state.medium = fMedium.value; state.loyalty = fLoyalty.value;
+  const on = [fMarket, fMedium, fLoyalty].filter(s => s.value !== "all").map(s => s.selectedOptions[0].text);
+  fSummary.textContent = on.length ? "Showing: " + on.join(" · ") : "";
+  tabDraw[tab]();
+}
+[fMarket, fMedium, fLoyalty].forEach(s => s.addEventListener("change", filtersChanged));
+fReset.addEventListener("click", () => { [fMarket, fMedium, fLoyalty].forEach(s => s.value = "all"); filtersChanged(); });
+document.getElementById("trendMetric").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; state.trend = b.dataset.m; trendMetric.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); drawTrend(); });
+shareBtn.addEventListener("click", () => { shareBtn.textContent = "Link copied · expires in 90 days"; });
+route();
+</script>
