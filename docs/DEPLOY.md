@@ -1,6 +1,6 @@
 # Deploying RFM Studio on Google Cloud
 
-Everything is done in the Google Cloud console — no command line needed. Plan for about 45 minutes the first time.
+Everything is done in the Google Cloud console — no command line needed. For using the app, see [USER_GUIDE.md](USER_GUIDE.md). Plan for about 45 minutes the first time.
 After that, every merge to `main` deploys automatically.
 
 ## What you will create
