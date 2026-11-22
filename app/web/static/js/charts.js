@@ -30,6 +30,32 @@
     const mixed = ["Cross-shopper", "Multi-category shopper"];
     return [...rows.filter((r) => !mixed.includes(r.type)).sort((a, b) => b.customers - a.customers), ...mixed.map((m) => rows.find((r) => r.type === m)).filter(Boolean)];
   };
+  const NEG = "#FF4B50";   // Precis "negative"
+  const signed = (v) => (v == null ? "–" : (v > 0 ? "+" : "") + pct(v));
+  const growthCell = (v) => (v == null ? "–" : `<span class="${v >= 0 ? "up" : "down"}">${v >= 0 ? "▲" : "▼"} ${pct(Math.abs(v))}</span>`);
+  const chapter = (n, eyebrow, headline) => `<div class="chapter"><div class="chapter-n">${n}</div><div><div class="eyebrow">${eyebrow}</div><h2>${headline || ""}</h2></div></div>`;
+  // Stacked segment mix (100% or customers) for any grouping; the hovered segment is highlighted in the tooltip.
+  const stackMix = (ctx, groups, cells, gk, mode) => {
+    const segs = ctx.order, cell = {}, count = mode === "count";
+    cells.forEach((s) => (cell[s[gk] + "|" + s.segment] = s));
+    const totals = groups.map((g) => segs.reduce((a, s) => a + ((cell[g + "|" + s] || {}).customers || 0), 0)), maxT = Math.max(...totals, 1);
+    return { ...base(), grid: { left: 8, right: 8, top: 64, bottom: 8, containLabel: true }, legend: { ...base().legend, data: segs },
+      tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, formatter: (ps) => `<b>${esc(ps[0].axisValue)}</b>` + ps.slice().reverse().map((p) => {
+        const c = cell[p.axisValue + "|" + p.seriesName] || {}, line = `${p.marker}${esc(p.seriesName)}: <b>${pct(c.share || 0, 1)}</b> <span style="color:${T.muted}">(${fmt(c.customers || 0)})</span>`;
+        return ctx.state.hoverSeries === p.seriesName ? `<div style="font-weight:700;background:${T.lp};margin:1px -6px;padding:1px 6px;border-radius:6px">${line}</div>` : `<div style="opacity:${ctx.state.hoverSeries ? 0.6 : 1}">${line}</div>`;
+      }).join("") },
+      xAxis: axis({ type: "category", data: groups, axisLabel: { color: T.navy, fontWeight: 600, fontSize: 12.5 } }),
+      yAxis: axis(count ? { type: "value", axisLabel: { color: T.muted, formatter: (v) => compact(v) } } : { type: "value", min: 0, max: 1, axisLabel: { color: T.muted, formatter: (v) => pct(v) } }),
+      series: segs.map((seg, i) => ({ name: seg, type: "bar", stack: "mix", barMaxWidth: 64, color: RFM.segmentColor(i), itemStyle: { borderColor: "#fff", borderWidth: 1 },
+        data: groups.map((g) => (cell[g + "|" + seg] || {})[count ? "customers" : "share"] || 0), emphasis: { focus: "series" },
+        label: { show: true, position: "inside", color: RFM.segmentInk(i), fontSize: 11, fontWeight: 600,
+          formatter: (p) => (count ? (p.value / maxT >= 0.05 ? compact(p.value) : "") : p.value >= 0.04 ? pct(p.value) : "") } })) };
+  };
+  const hoverSeries = (inst, ctx) => {
+    inst.on("mouseover", (p) => { ctx.state.hoverSeries = p.seriesName; });
+    inst.on("mouseout", () => { ctx.state.hoverSeries = null; });
+    inst.on("globalout", () => { ctx.state.hoverSeries = null; });
+  };
   const basisText = (ctx) => (ctx.view.cohorts.basis === "first_ever" ? "first-ever purchase" : "first purchase in the window");
 
   const CARDS = {
@@ -328,31 +354,12 @@
       },
     },
     "mk-segshare": {
-      title: "Segment mix by market", sub: () => "Each bar is one market's customers, split by segment (100%)", height: 460,
-      how: "Block height is the segment's share of that market's customers, so every bar adds up to 100%. Compare the same colour across bars: a taller block means the market over-indexes on that segment.",
-      when: (ctx) => !!ctx.mk,
-      chart: (ctx) => {
-        const ms = ctx.mk.rows.map((r) => r.market), segs = ctx.order;
-        const cell = {};
-        ctx.mk.segment_share.forEach((s) => (cell[s.market + "|" + s.segment] = s));
-        return { ...base(), grid: { left: 8, right: 8, top: 64, bottom: 8, containLabel: true },
-          legend: { ...base().legend, type: "plain", data: segs },
-          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow,
-            formatter: (ps) => `<b>${esc(ps[0].axisValue)}</b><br>` + ps.slice().reverse().map((p) => {
-              const c = cell[p.axisValue + "|" + p.seriesName];
-              return `${p.marker}${esc(p.seriesName)}: <b>${pct(p.value, 1)}</b> <span style="color:${T.muted}">(${fmt(c ? c.customers : 0)})</span>`;
-            }).join("<br>") },
-          xAxis: axis({ type: "category", data: ms, axisLabel: { color: T.navy, fontWeight: 600, fontSize: 12.5 } }),
-          yAxis: axis({ type: "value", min: 0, max: 1, axisLabel: { color: T.muted, formatter: (v) => pct(v) } }),
-          series: segs.map((seg, i) => ({
-            name: seg, type: "bar", stack: "mix", barMaxWidth: 64, color: RFM.segmentColor(i),
-            data: ms.map((m) => (cell[m + "|" + seg] ? cell[m + "|" + seg].share : 0)),
-            itemStyle: { borderColor: "#fff", borderWidth: 1 },
-            label: { show: true, position: "inside", color: RFM.segmentInk(i), fontSize: 11, fontWeight: 600,
-              formatter: (p) => (p.value >= 0.04 ? pct(p.value) : "") },
-            emphasis: { focus: "series" },
-          })) };
-      },
+      title: "Segment mix by market", height: 460, when: (ctx) => !!ctx.mk,
+      sub: (ctx) => (ctx.state.mkMix === "count" ? "Each market's customers by segment (customers)" : "Each market's customers by segment (100% per bar)"),
+      controls: [{ key: "mkMix", options: [["share", "100%"], ["count", "Customers"]] }],
+      how: "Compare the same colour across bars: a taller block means the market over-indexes on that segment. Switch to Customers to see absolute sizes. Hover a block to highlight its segment.",
+      chart: (ctx) => stackMix(ctx, ctx.mk.rows.map((r) => r.market), ctx.mk.segment_share, "market", ctx.state.mkMix),
+      onChart: hoverSeries,
       table: (ctx) => {
         const ms = ctx.mk.rows.map((r) => r.market);
         return { cols: [{ key: "segment", label: "Segment" }, ...ms.map((m) => ({ key: m, label: m, num: 1, fmt: (v) => pct(v, 1) }))],
@@ -381,69 +388,34 @@
       html: (ctx) => `<div class="card empty"><h3>No market comparison</h3><p class="muted">${ctx.R.meta.has.market ? "The current filters leave one market only." : "The transactions have no market column, or only one market."}</p></div>`,
     },
 
-    /* ================= CATEGORIES (L3) ================= */
+    /* ================= CATEGORIES (L3) — one story in three chapters =================
+       01 Where we stand (situation) · 02 What's changing (complication, time lens) · 03 What to do (resolution) */
     "cat-none": {
       plain: true, when: (ctx) => !ctx.R.categories,
       html: () => `<div class="card" style="justify-items:start">${RFM.pill("na", "Needs the items table")}<h2>Categories</h2>
-        <p class="muted" style="max-width:60ch">Category and sub-category insights, shopper types, cross-shopping and cross-sell audiences unlock when the client provides the items table with item_category (and item_sub_category).</p></div>`,
+        <p class="muted" style="max-width:60ch">Category insights, shopper types, cross-sell moves and audiences unlock when the client provides the items table with item_category (and item_sub_category).</p></div>`,
     },
+    "cat-ch1": { plain: true, when: (ctx) => !!ctx.cv, html: (ctx) => chapter("01", "Where we stand", ctx.cv.headlines.situation) },
     "cat-stats": {
       plain: true, when: (ctx) => !!ctx.cv,
       html: (ctx) => {
         const s = ctx.cv.summary;
         return `<div class="grid g4">${[
           stat("Categories", fmt(ctx.cv.categories.length), `${fmt(ctx.R.categories.meta.subs)} sub-categories`, "lp"),
-          stat("Categories per customer", fmt(s.avg_categories, 1), `${pct(1 - s.cross_share)} buy in one category only`, "hl"),
-          stat("Cross-shoppers", pct(s.cross_share), `bought in 2+ categories · ${pct(s.multi_share)} in 3+`),
-          stat("Revenue from cross-shoppers", pct(s.cross_revenue_share), "of net revenue", "lt"),
+          stat("Revenue from cross-shoppers", pct(s.cross_revenue_share), "customers who buy in 2+ categories", "hl"),
+          stat("Cross-shoppers", pct(s.cross_share), `of customers · ${pct(s.multi_share)} buy in 3+`),
+          stat("Categories per customer", fmt(s.avg_categories, 1), `${pct(1 - s.cross_share)} buy in one category only`, "lt"),
         ].join("")}</div>`;
       },
     },
-    "cat-notes": {
-      plain: true, when: (ctx) => !!ctx.cv,
-      html: (ctx) => {
-        const m = ctx.R.categories.meta, gap = m.item_vs_transaction_gap;
-        return `<details class="card notes"><summary><b>How the category numbers are calculated</b><span class="small muted">Read before sharing</span></summary><ul>
-          <li><b>Revenue</b> comes from item lines, net of returned lines, converted to ${esc(ctx.cur)}. Item lines total ${pct(Math.abs(gap), 1)} ${gap >= 0 ? "more" : "less"} than transaction amounts (usually VAT, shipping or discounts on a different basis). RFM scores and segments still use transaction amounts.</li>
-          <li><b>Shopper types</b> use each customer's ${m.basis === "orders" ? "orders" : "item revenue"}: ${pct(m.dominance)} or more in one category makes a “[category] shopper”, two categories a “Cross-shopper”, three or more a “Multi-category shopper”. Basis and threshold are settings.</li>
-          <li><b>Segments within a category</b> use cut-offs calculated for that category's buyers. “Champion in Beauty” means top Beauty buyer — not the same spend as a Champion in Footwear.</li>
-          <li><b>Cross-shopping and affinity</b> show which categories go together, not what causes a purchase. Test cross-sell audiences against a holdout group.</li>
-          <li>Categories beyond the ${m.max_named} largest are grouped as “Other”. Sub-categories with fewer than ${m.small} buyers are flagged as too small to read.</li>
-        </ul></details>`;
-      },
-    },
-    "cat-insights": {
-      title: "Category insights", sub: () => "Generated from the numbers. Sense-check before sharing.", when: (ctx) => !!ctx.cv,
-      html: (ctx) => `<div class="insights">${ctx.cv.insights.map((t) => `<div class="insight"><div>${t}</div></div>`).join("")}</div>`,
-    },
-    "cat-tree": {
-      title: "Where the revenue is", sub: () => "Net item revenue by category and sub-category · click a category to zoom in", height: 400, when: (ctx) => !!ctx.cv,
-      how: "Each rectangle's area is its share of item revenue. Large blocks are the categories that carry the business; hover for buyers, return rate and discount rate.",
-      chart: (ctx) => {
-        const data = ctx.cv.kpis.map((k) => ({ name: k.name, value: Math.max(k.revenue, 0), k, itemStyle: { color: RFM.categoryColor(ctx.R, k.name) },
-          children: k.subs.map((s) => ({ name: s.name, value: Math.max(s.revenue, 0), k: s, itemStyle: { color: RFM.categoryColor(ctx.R, k.name) },
-            label: { color: RFM.categoryInk(ctx.R, k.name) } })) }));
-        return { ...base(), tooltip: { ...base().tooltip, formatter: (p) => { const k = p.data.k; if (!k) return ""; return `<b>${esc(p.name)}</b><br>Revenue: <b>${money(k.revenue, ctx.cur)}</b> · ${pct(k.revenue_share, 1)}<br>Buyers: ${fmt(k.customers)} (${pct(k.penetration)} of customers)<br>Return rate: ${pct(k.return_rate, 1)} · Discount: ${pct(k.discount_rate, 1)}`; } },
-          series: [{ type: "treemap", roam: false, nodeClick: "zoomToNode", top: 8, left: 0, right: 0, bottom: 30, data,
-            breadcrumb: { show: true, bottom: 0, itemStyle: { color: T.paper, borderColor: T.line, textStyle: { color: T.navy } } },
-            levels: [{ itemStyle: { borderWidth: 0, gapWidth: 6 } },
-              { itemStyle: { borderColor: "#fff", borderWidth: 0, gapWidth: 2 },
-                upperLabel: { show: true, height: 26, fontWeight: 600, fontSize: 13, fontFamily: "Space Grotesk, Inter, sans-serif", formatter: (p) => `${p.name} · ${pct(p.data.k.revenue_share)}` } },
-              { itemStyle: { borderColor: "rgba(255,255,255,.9)", borderWidth: 1, gapWidth: 1 },
-                label: { formatter: (p) => `${p.name}\n${pct(p.data.k.revenue_share)}`, fontSize: 12, lineHeight: 16 } }] }] };
-      },
-      table: (ctx) => ({ cols: [{ key: "name", label: "Category / sub-category" }, { key: "revenue", label: "Revenue", num: 1, fmt: (v) => compact(v) }, { key: "revenue_share", label: "Share", num: 1, fmt: (v) => pct(v, 1) }],
-        rows: ctx.cv.kpis.flatMap((k) => [k, ...k.subs.map((s) => ({ ...s, name: "   " + k.name + " › " + s.name }))]) }),
-    },
     "cat-kpis": {
-      title: "Category KPIs", sub: () => "Click a category to see its sub-categories", when: (ctx) => !!ctx.cv,
-      how: "Penetration is the share of customers in view who bought in the category. AOV and items per order use the purchases that contain the category. Return rate is returned item revenue as a share of gross item revenue.",
+      title: "Category scoreboard", sub: (ctx) => `Click a category for its sub-categories · growth = last ${ctx.R.categories.meta.half_months} months vs the ${ctx.R.categories.meta.half_months} before`, when: (ctx) => !!ctx.cv,
+      how: "Penetration is the share of customers in view who bought the category. Lapsing is the share of its buyers who have not bought anything recently (R score 1–2). A category with high revenue, falling growth and many lapsing buyers is where the next chapter looks first.",
       html: (ctx) => {
-        const cols = [["revenue", "Revenue", (v) => compact(v)], ["revenue_share", "Share", (v) => pct(v, 1)], ["customers", "Buyers", (v) => fmt(v)],
-          ["penetration", "Penetration", (v) => pct(v)], ["aov", "AOV", (v) => fmt(v)], ["items_per_order", "Items / order", (v) => fmt(v, 1)],
-          ["avg_price", "Avg price", (v) => fmt(v)], ["discount_rate", "Discount", (v) => pct(v, 1)], ["return_rate", "Return rate", (v) => pct(v, 1)],
-          ["repeat_rate", "Repeat rate", (v) => pct(v)], ["median_days_since", "Median days since", (v) => fmt(v)]];
-        const cells = (r) => cols.map(([k, , f]) => `<td class="n">${esc(f(r[k]))}</td>`).join("");
+        const cols = [["revenue", "Revenue", (v) => compact(v)], ["revenue_share", "Share", (v) => pct(v, 1)], ["growth", "Growth", growthCell],
+          ["customers", "Buyers", (v) => fmt(v)], ["penetration", "Penetration", (v) => pct(v)], ["repeat_rate", "Repeat rate", (v) => pct(v)],
+          ["lapsing", "Lapsing", (v) => pct(v)], ["return_rate", "Return rate", (v) => pct(v, 1)], ["aov", "AOV", (v) => fmt(v)], ["discount_rate", "Discount", (v) => pct(v, 1)]];
+        const cells = (r) => cols.map(([k, , f]) => `<td class="n">${f === growthCell ? f(r[k]) : esc(f(r[k]))}</td>`).join("");
         const rows = ctx.cv.kpis.map((k) => {
           const open = !!ctx.state.expanded[k.name];
           return `<tr><td><button class="expander" data-expand="${esc(k.name)}" aria-expanded="${open}"><span class="swatch" style="background:${RFM.categoryColor(ctx.R, k.name)}"></span><b>${esc(k.name)}</b></button></td>${cells(k)}</tr>` +
@@ -452,63 +424,10 @@
         return `<div class="table-wrap"><table class="t"><thead><tr><th>Category</th>${cols.map(([, l]) => `<th class="n">${l}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
       },
     },
-    "cat-segmix": {
-      title: "RFM segment mix by category", sub: () => "Overall segment of each category's buyers (100% per bar)", height: 460, when: (ctx) => !!ctx.cv,
-      how: "Each bar is one category's buyers split by their overall RFM segment. A category with a tall Hibernating block is full of lapsed customers: reactivation there pays back more than acquisition.",
-      chart: (ctx) => {
-        const cats = ctx.cv.categories, segs = ctx.order, cell = {};
-        ctx.cv.segment_mix.forEach((s) => (cell[s.category + "|" + s.segment] = s));
-        return { ...base(), grid: { left: 8, right: 8, top: 64, bottom: 8, containLabel: true }, legend: { ...base().legend, data: segs },
-          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, formatter: (ps) => `<b>${esc(ps[0].axisValue)} buyers</b><br>` + ps.slice().reverse().map((p) => `${p.marker}${esc(p.seriesName)}: <b>${pct(p.value, 1)}</b> <span style="color:${T.muted}">(${fmt((cell[p.axisValue + "|" + p.seriesName] || {}).customers || 0)})</span>`).join("<br>") },
-          xAxis: axis({ type: "category", data: cats, axisLabel: { color: T.navy, fontWeight: 600, fontSize: 12.5 } }),
-          yAxis: axis({ type: "value", min: 0, max: 1, axisLabel: { color: T.muted, formatter: (v) => pct(v) } }),
-          series: segs.map((seg, i) => ({ name: seg, type: "bar", stack: "mix", barMaxWidth: 64, color: RFM.segmentColor(i), itemStyle: { borderColor: "#fff", borderWidth: 1 },
-            data: cats.map((c) => (cell[c + "|" + seg] || {}).share || 0), emphasis: { focus: "series" },
-            label: { show: true, position: "inside", color: RFM.segmentInk(i), fontSize: 11, fontWeight: 600, formatter: (p) => (p.value >= 0.04 ? pct(p.value) : "") } })) };
-      },
-      table: (ctx) => ({ cols: [{ key: "segment", label: "Segment" }, ...ctx.cv.categories.map((c) => ({ key: c, label: c, num: 1, fmt: (v) => pct(v, 1) }))],
-        rows: ctx.order.map((s) => ({ segment: s, ...Object.fromEntries(ctx.cv.segment_mix.filter((x) => x.segment === s).map((x) => [x.category, x.share])) })) }),
-    },
-    "cat-rfm": {
-      title: "Segments within a category", height: 400, when: (ctx) => !!ctx.cv && !!ctx.cv.cat_rfm[ctx.state.catSel],
-      sub: (ctx) => { const r = ctx.cv.cat_rfm[ctx.state.catSel]; return `${fmt(r.buyers)} ${ctx.state.catSel} buyers scored on their ${ctx.state.catSel} purchases only · R5 = bought within ${fmt(r.cutoffs.recency_days_edges[0])} days · M5 = more than ${compact(r.cutoffs.monetary_edges[3])} ${ctx.cur}`; },
-      controls: (ctx) => [{ key: "catSel", options: ctx.cv.categories.filter((c) => ctx.cv.cat_rfm[c]).map((c) => [c, c]) }],
-      how: "Same segment rules as the overall RFM, but recency, frequency and spend count only purchases in this category, with cut-offs calculated for this category's buyers. Compare customer share and revenue share to see where the category's value sits.",
-      chart: (ctx) => {
-        const rows = ctx.cv.cat_rfm[ctx.state.catSel].segments.filter((s) => s.customers > 0).slice().reverse();
-        return { ...base(), grid: { left: 8, right: 44, top: 40, bottom: 8, containLabel: true },
-          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, formatter: (ps) => { const r = rows[ps[0].dataIndex]; return `<b>${esc(r.segment)} in ${esc(ctx.state.catSel)}</b><br>${fmt(r.customers)} customers · ${pct(r.share, 1)} of buyers<br>${pct(r.revenue_share, 1)} of the category's revenue`; } },
-          xAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: (v) => pct(v) } }),
-          yAxis: axis({ type: "category", data: rows.map((r) => r.segment), axisLine: { show: false }, axisLabel: { color: T.navy, fontSize: 12.5 } }),
-          series: [
-            { name: "Share of buyers", type: "bar", data: rows.map((r) => r.share), barWidth: 10, barGap: "25%", itemStyle: { color: T.sky, borderRadius: [0, 4, 4, 0] }, label: { show: true, position: "right", color: T.ink2, fontSize: 11, formatter: (p) => pct(p.value) } },
-            { name: "Share of category revenue", type: "bar", data: rows.map((r) => r.revenue_share), barWidth: 10, itemStyle: { color: T.blue, borderRadius: [0, 4, 4, 0] }, label: { show: true, position: "right", color: T.navy, fontWeight: 600, fontSize: 11, formatter: (p) => pct(p.value) } },
-          ] };
-      },
-      table: (ctx) => ({ cols: [{ key: "segment", label: "Segment" }, { key: "customers", label: "Customers", num: 1, fmt: (v) => fmt(v) }, { key: "share", label: "Share of buyers", num: 1, fmt: (v) => pct(v, 1) }, { key: "revenue_share", label: "Share of revenue", num: 1, fmt: (v) => pct(v, 1) }],
-        rows: ctx.cv.cat_rfm[ctx.state.catSel].segments }),
-    },
-    "cat-vs": {
-      title: "Overall segment vs category segment", height: 400, when: (ctx) => !!ctx.cv && !!ctx.cv.cat_rfm[ctx.state.catSel],
-      sub: (ctx) => `Rows: overall segment · columns: segment in ${ctx.state.catSel} · cells: customers`,
-      how: "Customers in a strong overall segment but a weak category segment (for example Champions overall, Hibernating in this category) already trust the brand but have drifted from this category: the cheapest cross-sell and re-engagement audience.",
-      chart: (ctx) => {
-        const o = ctx.order, cells = ctx.cv.cat_rfm[ctx.state.catSel].vs_overall;
-        const data = cells.map((c) => [o.indexOf(c.category_segment), o.indexOf(c.overall), c.customers]);
-        const mx = Math.max(...data.map((d) => d[2]), 1);
-        return { ...base(), grid: { left: 8, right: 8, top: 8, bottom: 70, containLabel: true },
-          tooltip: { ...base().tooltip, formatter: (p) => `<b>${fmt(p.value[2])}</b> customers are<br>${esc(o[p.value[1]])} overall<br>${esc(o[p.value[0]])} in ${esc(ctx.state.catSel)}` },
-          xAxis: axis({ type: "category", data: o, axisLabel: { color: T.navy, fontSize: 10.5, rotate: 35, interval: 0 }, name: `Segment in ${ctx.state.catSel}`, nameLocation: "middle", nameGap: 58, nameTextStyle: { color: T.muted } }),
-          yAxis: axis({ type: "category", data: o, inverse: true, axisLine: { show: false }, axisLabel: { color: T.navy, fontSize: 11 } }),
-          visualMap: { show: false, min: 0, max: mx, dimension: 2, inRange: { color: T.seq } },
-          series: [{ type: "heatmap", data: data.map((d) => ({ value: d, label: RFM.cellLabel(d[2], mx) })), itemStyle: { borderColor: "#fff", borderWidth: 2, borderRadius: 4 },
-            label: { show: true, fontSize: 10, formatter: (p) => (p.value[2] ? compact(p.value[2]) : "") } }] };
-      },
-    },
     "cat-breadth": {
-      title: "Breadth pays", sub: (ctx) => `By number of categories bought · ${pct(1 - ctx.cv.summary.cross_share)} of customers buy in one category only`, when: (ctx) => !!ctx.cv && ctx.cv.breadth.length > 1,
+      title: "Breadth pays", sub: (ctx) => `Value by number of categories bought · ${pct(1 - ctx.cv.summary.cross_share)} of customers buy in one only`, when: (ctx) => !!ctx.cv && ctx.cv.breadth.length > 1,
       controls: [{ key: "breadth", options: [["revenue_per_customer", "Revenue"], ["repeat_rate", "Repeat"], ["avg_orders", "Orders"]] }],
-      how: "Customers who buy across more categories are worth more and come back more often. The step from one to two categories is usually the cheapest to influence: a second-category offer in the post-purchase flow.",
+      how: "Customers who buy across more categories are worth more and come back more often. The step from one to two categories is the cheapest to influence — it is the first move in chapter 03.",
       chart: (ctx) => {
         const b = ctx.cv.breadth, k = ctx.state.breadth, f = k === "repeat_rate" ? (v) => pct(v) : k === "avg_orders" ? (v) => fmt(v, 1) : (v) => compact(v);
         return { ...base(), legend: { show: false }, grid: { left: 8, right: 16, top: 28, bottom: 30, containLabel: true },
@@ -522,12 +441,12 @@
         { key: "revenue_per_customer", label: "Revenue / customer", num: 1, fmt: (v) => fmt(v) }, { key: "repeat_rate", label: "Repeat rate", num: 1, fmt: (v) => pct(v) }, { key: "avg_orders", label: "Orders", num: 1, fmt: (v) => fmt(v, 1) }], rows: ctx.cv.breadth }),
     },
     "cat-shoppers": {
-      title: "Shopper types", sub: (ctx) => `Based on ${ctx.R.categories.meta.basis === "orders" ? "orders" : "item revenue"} · ${pct(ctx.R.categories.meta.dominance)}+ in one category = “[category] shopper”`, height: 360, when: (ctx) => !!ctx.cv,
-      how: "Types come from the categories the client sends — nothing is hard-coded. Compare customer share with revenue share: Multi-category shoppers are usually a small group carrying a large part of revenue.",
+      title: "Who the customers are", sub: (ctx) => `Shopper types from ${ctx.R.categories.meta.basis === "orders" ? "orders" : "item revenue"} · ${pct(ctx.R.categories.meta.dominance)}+ in one category = “[category] shopper”`, height: 360, when: (ctx) => !!ctx.cv,
+      how: "Types come from the categories the client sends — nothing is hard-coded. Compare customer share with revenue share: multi-category shoppers are usually a small group that carries a large part of revenue. Each type is also an audience.",
       chart: (ctx) => {
         const rows = shopperOrder(ctx.cv.shopper_types).reverse();
         return { ...base(), grid: { left: 8, right: 44, top: 40, bottom: 8, containLabel: true },
-          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, formatter: (ps) => { const r = rows[ps[0].dataIndex]; return `<b>${esc(r.type)}</b><br>${fmt(r.customers)} customers · ${pct(r.customer_share, 1)}<br>${pct(r.revenue_share, 1)} of revenue · ${fmt(r.revenue_per_customer)} ${ctx.cur} per customer<br>Repeat rate ${pct(r.repeat_rate)} · ${pct(r.champions_share)} Champions`; } },
+          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, formatter: (ps) => { const r = rows[ps[0].dataIndex]; return `<b>${esc(r.type)}</b><br>${fmt(r.customers)} customers · ${pct(r.customer_share, 1)}<br>${pct(r.revenue_share, 1)} of revenue · ${fmt(r.revenue_per_customer)} ${ctx.cur} per customer<br>Repeat rate ${pct(r.repeat_rate)}`; } },
           xAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: (v) => pct(v) } }),
           yAxis: axis({ type: "category", data: rows.map((r) => r.type), axisLine: { show: false }, axisLabel: { color: T.navy, fontSize: 12 } }),
           series: [
@@ -536,38 +455,33 @@
           ] };
       },
       table: (ctx) => ({ cols: [{ key: "type", label: "Shopper type" }, { key: "customers", label: "Customers", num: 1, fmt: (v) => fmt(v) }, { key: "customer_share", label: "Share of customers", num: 1, fmt: (v) => pct(v, 1) },
-        { key: "revenue_share", label: "Share of revenue", num: 1, fmt: (v) => pct(v, 1) }, { key: "revenue_per_customer", label: "Revenue / customer", num: 1, fmt: (v) => fmt(v) },
-        { key: "repeat_rate", label: "Repeat rate", num: 1, fmt: (v) => pct(v) }, { key: "champions_share", label: "Champions", num: 1, fmt: (v) => pct(v) }], rows: shopperOrder(ctx.cv.shopper_types) }),
+        { key: "revenue_share", label: "Share of revenue", num: 1, fmt: (v) => pct(v, 1) }, { key: "revenue_per_customer", label: "Revenue / customer", num: 1, fmt: (v) => fmt(v) }, { key: "repeat_rate", label: "Repeat rate", num: 1, fmt: (v) => pct(v) }],
+        rows: shopperOrder(ctx.cv.shopper_types) }),
     },
-    "cat-cross": {
-      title: "Cross-shopping", height: 380, when: (ctx) => !!ctx.cv && ctx.cv.categories.length > 1,
-      sub: (ctx) => (ctx.state.crossMode === "lift" ? "How much more likely than average a row's buyers are to also buy the column (1.0× = average)" : "Of the buyers of a row's category, the share who also bought the column's category"),
-      controls: [{ key: "crossMode", options: [["share", "Share"], ["lift", "Lift"]] }],
-      how: "Read along a row. Share answers “what else do Footwear buyers buy?”. Lift corrects for size: above 1.0× means the pair goes together more than chance, which makes it a good bundle or next-category recommendation. Association only — not cause.",
+
+    "cat-ch2": { plain: true, when: (ctx) => !!ctx.cv, html: (ctx) => chapter("02", "What's changing", ctx.cv.headlines.complication) },
+    "cat-momentum": {
+      title: "Momentum by category", sub: (ctx) => `Last ${ctx.R.categories.meta.half_months} months vs the ${ctx.R.categories.meta.half_months} before`, height: 340, when: (ctx) => !!ctx.cv && ctx.cv.kpis.some((k) => k.growth != null),
+      controls: [{ key: "momentum", options: [["growth", "Revenue"], ["buyers_growth", "Buyers"], ["rpb_growth", "Revenue per buyer"]] }],
+      how: "Revenue growth splits into buyers and revenue per buyer. Fewer buyers is a reach problem (reactivation, prospecting); lower spend per buyer is a value problem (assortment, bundles, price). Switch the view to see which one drives each category.",
       chart: (ctx) => {
-        const cats = ctx.cv.categories, lift = ctx.state.crossMode === "lift";
-        const data = ctx.cv.cross.filter((c) => c.a !== c.b).map((c) => [cats.indexOf(c.b), cats.indexOf(c.a), lift ? c.lift : c.share, c.share, c.lift, c.both]);
-        const vals = data.map((d) => d[2]), mx = Math.max(...vals, 0.01), mn = Math.min(...vals);
-        const span = lift ? Math.max(Math.abs(mx - 1), Math.abs(1 - mn), 0.05) : 0;
-        return { ...base(), grid: { left: 8, right: 8, top: 36, bottom: 8, containLabel: true },
-          tooltip: { ...base().tooltip, formatter: (p) => `Of <b>${esc(cats[p.value[1]])}</b> buyers, <b>${pct(p.value[3])}</b> also bought ${esc(cats[p.value[0]])}<br>Lift: <b>${fmt(p.value[4], 2)}×</b> · ${fmt(p.value[5])} customers` },
-          xAxis: axis({ type: "category", data: cats, position: "top", axisLine: { show: false }, axisLabel: { color: T.navy, fontWeight: 600 } }),
-          yAxis: axis({ type: "category", data: cats, inverse: true, axisLine: { show: false }, axisLabel: { color: T.navy, fontWeight: 600 } }),
-          visualMap: lift ? { show: false, min: 1 - span, max: 1 + span, dimension: 2, inRange: { color: ["#C6413F", "#F3C9C8", "#F0EFEC", "#C8E1FF", "#2846DC"] } }
-            : { show: false, min: 0, max: mx, dimension: 2, inRange: { color: T.seq } },
-          series: [{ type: "heatmap", data: data.map((d) => ({ value: d, label: { color: lift ? (Math.abs(d[2] - 1) > 0.6 * span ? "#fff" : T.navy) : d[2] > 0.6 * mx ? "#fff" : T.navy } })),
-            itemStyle: { borderColor: "#fff", borderWidth: 3, borderRadius: 6 }, label: { show: true, fontSize: 11.5, formatter: (p) => (lift ? fmt(p.value[2], 2) + "×" : pct(p.value[2])) } }] };
+        const k = ctx.state.momentum, rows = ctx.cv.kpis.filter((r) => r[k] != null).slice().sort((a, b) => a[k] - b[k]);
+        return { ...base(), legend: { show: false }, grid: { left: 8, right: 56, top: 16, bottom: 8, containLabel: true },
+          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, formatter: (ps) => { const r = rows[ps[0].dataIndex]; return `<b>${esc(r.name)}</b><br>Revenue ${signed(r.growth)}<br>Buyers ${signed(r.buyers_growth)}<br>Revenue per buyer ${signed(r.rpb_growth)}`; } },
+          xAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: (v) => signed(v) } }),
+          yAxis: axis({ type: "category", data: rows.map((r) => r.name), axisLine: { show: false }, axisLabel: { color: T.navy, fontWeight: 600 } }),
+          series: [{ type: "bar", barWidth: 16, data: rows.map((r) => ({ value: r[k], itemStyle: { color: r[k] >= 0 ? T.blue : NEG, borderRadius: r[k] >= 0 ? [0, 4, 4, 0] : [4, 0, 0, 4] } })),
+            label: { show: true, position: "right", color: T.navy, fontWeight: 600, fontSize: 11.5, formatter: (p) => signed(p.value) } }] };
       },
-      table: (ctx) => ({ cols: [{ key: "a", label: "Buyers of" }, { key: "b", label: "Also bought" }, { key: "share", label: "Share", num: 1, fmt: (v) => pct(v, 1) }, { key: "lift", label: "Lift", num: 1, fmt: (v) => fmt(v, 2) + "×" }, { key: "both", label: "Customers", num: 1, fmt: (v) => fmt(v) }],
-        rows: ctx.cv.cross.filter((c) => c.a !== c.b) }),
+      table: (ctx) => ({ cols: [{ key: "name", label: "Category" }, { key: "growth", label: "Revenue", num: 1, fmt: signed }, { key: "buyers_growth", label: "Buyers", num: 1, fmt: signed }, { key: "rpb_growth", label: "Revenue per buyer", num: 1, fmt: signed }], rows: ctx.cv.kpis }),
     },
     "cat-cycle": {
-      title: "Repurchase in the same category", sub: () => "Share of a category's buyers who bought in it again within 90 / 180 days · median days between purchases", height: 380, when: (ctx) => !!ctx.cv,
-      how: "Only buyers whose first purchase in the category was at least 180 days before the snapshot count, so recent buyers do not drag the numbers down. A short median cycle suggests replenishment reminders; a long one suggests inspiration and cross-sell instead.",
+      title: "How fast buyers come back", sub: () => "Buyers who bought the same category again within 90 / 180 days · typical gap in days", height: 340, when: (ctx) => !!ctx.cv,
+      how: "Only buyers whose first purchase in the category was at least 180 days ago count, so recent buyers do not drag the numbers down. A short typical gap calls for replenishment reminders; a long one for inspiration and cross-sell instead.",
       chart: (ctx) => {
-        const rows = ctx.cv.cycle.slice().reverse(), lab = rows.map((r) => `${r.category} · ${r.median_days == null ? "–" : fmt(r.median_days) + " d"}`);
+        const rows = ctx.cv.cycle.slice().sort((a, b) => (a.back_180 || 0) - (b.back_180 || 0)), lab = rows.map((r) => `${r.category} · ${r.median_days == null ? "–" : fmt(r.median_days) + " d"}`);
         return { ...base(), grid: { left: 8, right: 44, top: 40, bottom: 8, containLabel: true },
-          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, formatter: (ps) => { const r = rows[ps[0].dataIndex]; return `<b>${esc(r.category)}</b><br>Within 90 days: ${pct(r.back_90)}<br>Within 180 days: ${pct(r.back_180)}<br>Median days between purchases: ${fmt(r.median_days)}<br><span style="color:${T.muted}">${fmt(r.buyers)} buyers</span>`; } },
+          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, formatter: (ps) => { const r = rows[ps[0].dataIndex]; return `<b>${esc(r.category)}</b><br>Back within 90 days: ${pct(r.back_90)}<br>Back within 180 days: ${pct(r.back_180)}<br>Typical gap: ${fmt(r.median_days)} days<br><span style="color:${T.muted}">${fmt(r.buyers)} buyers</span>`; } },
           xAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: (v) => pct(v) } }),
           yAxis: axis({ type: "category", data: lab, axisLine: { show: false }, axisLabel: { color: T.navy, fontSize: 12 } }),
           series: [
@@ -575,71 +489,131 @@
             { name: "Within 180 days", type: "bar", data: rows.map((r) => r.back_180), barWidth: 9, itemStyle: { color: T.blue, borderRadius: [0, 4, 4, 0] }, label: { show: true, position: "right", color: T.navy, fontWeight: 600, fontSize: 11, formatter: (p) => pct(p.value) } },
           ] };
       },
-      table: (ctx) => ({ cols: [{ key: "category", label: "Category" }, { key: "buyers", label: "Buyers", num: 1, fmt: (v) => fmt(v) }, { key: "median_days", label: "Median days between purchases", num: 1, fmt: (v) => fmt(v) },
+      table: (ctx) => ({ cols: [{ key: "category", label: "Category" }, { key: "buyers", label: "Buyers", num: 1, fmt: (v) => fmt(v) }, { key: "median_days", label: "Typical gap (days)", num: 1, fmt: (v) => fmt(v) },
         { key: "back_90", label: "Within 90 days", num: 1, fmt: (v) => pct(v, 1) }, { key: "back_180", label: "Within 180 days", num: 1, fmt: (v) => pct(v, 1) }], rows: ctx.cv.cycle }),
     },
-    "cat-entry": {
-      title: "Entry category", sub: (ctx) => (ctx.state.entryMetric === "revenue_12m" ? `Net item revenue in the first 12 months per new customer, by the category of their first order` : "Share of new customers back within 180 days, by the category of their first order"),
-      height: 360, when: (ctx) => !!ctx.cv && ctx.cv.entry.length > 0,
-      controls: [{ key: "entryMetric", options: [["back_180", "Came back"], ["revenue_12m", "12-month revenue"]] }],
-      how: "The first category a customer buys predicts how valuable they become. Use the strongest entry categories in acquisition campaigns, and give customers who enter through weak ones a stronger onboarding. Only customers acquired long enough ago count for each measure.",
-      chart: (ctx) => {
-        const rows = ctx.cv.entry.slice().sort((a, b) => (b[ctx.state.entryMetric] || 0) - (a[ctx.state.entryMetric] || 0)), k = ctx.state.entryMetric;
-        const f = k === "back_180" ? (v) => pct(v) : (v) => compact(v);
-        return { ...base(), legend: { show: false }, grid: { left: 8, right: 16, top: 28, bottom: 8, containLabel: true },
-          tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, formatter: (ps) => { const r = rows[ps[0].dataIndex]; return `<b>Started with ${esc(r.category)}</b><br>${fmt(r.customers)} new customers<br>Back within 180 days: ${pct(r.back_180)}<br>12-month revenue: ${fmt(r.revenue_12m)} ${ctx.cur}`; } },
-          xAxis: axis({ type: "category", data: rows.map((r) => r.category), axisLabel: { color: T.navy, fontWeight: 600 } }),
-          yAxis: axis({ type: "value", axisLabel: { color: T.muted, formatter: f } }),
-          series: [{ type: "bar", barMaxWidth: 48, data: rows.map((r) => ({ value: r[k], itemStyle: { color: RFM.categoryColor(ctx.R, r.category), borderRadius: [4, 4, 0, 0] } })),
-            label: { show: true, position: "top", color: T.navy, fontWeight: 600, fontSize: 11.5, formatter: (p) => f(p.value) } }] };
-      },
-      table: (ctx) => ({ cols: [{ key: "category", label: "Entry category" }, { key: "customers", label: "New customers", num: 1, fmt: (v) => fmt(v) }, { key: "back_180", label: "Back within 180 days", num: 1, fmt: (v) => pct(v, 1) }, { key: "revenue_12m", label: "12-month revenue", num: 1, fmt: (v) => fmt(v) }], rows: ctx.cv.entry }),
-    },
-    "cat-flow": {
-      title: "From first to second purchase", sub: () => "New customers by the category of their first order (left) and second order (right)", height: 420, when: (ctx) => !!ctx.cv && ctx.cv.sankey.length > 0,
-      how: "Follow a band from left to right to see what new customers buy next. Wide bands into another category are natural next-category recommendations; the grey node is customers who have not come back yet.",
-      chart: (ctx) => {
-        const links = ctx.cv.sankey, names = [...new Set(links.flatMap((l) => [l.source, l.target]))];
-        const plain = (n) => n.replace(" ·2nd", "");
-        return { ...base(), tooltip: { ...base().tooltip, formatter: (p) => (p.dataType === "edge" ? `${fmt(p.data.value)} customers started with <b>${esc(plain(p.data.source))}</b> and ${p.data.target.startsWith("No 2nd") ? "have not bought again" : `next bought <b>${esc(plain(p.data.target))}</b>`}` : `<b>${esc(plain(p.name))}</b>`) },
-          series: [{ type: "sankey", left: 8, right: 150, top: 8, bottom: 8, nodeGap: 10, nodeWidth: 14, draggable: false, emphasis: { focus: "adjacency" },
-            data: names.map((n) => ({ name: n, itemStyle: { color: n.startsWith("No 2nd") ? T.line : RFM.categoryColor(ctx.R, plain(n)), borderWidth: 0 } })),
-            links, lineStyle: { color: "gradient", opacity: 0.35, curveness: 0.5 },
-            label: { color: T.navy, fontSize: 12, formatter: (p) => plain(p.name) } }] };
-      },
-      table: (ctx) => ({ cols: [{ key: "source", label: "First order" }, { key: "target", label: "Second order", fmt: (v) => v.replace(" ·2nd", "") }, { key: "value", label: "Customers", num: 1, fmt: (v) => fmt(v) }], rows: ctx.cv.sankey }),
-    },
     "cat-trend": {
-      title: "Category development", sub: (ctx) => (ctx.state.catTrend === "share" ? "Share of monthly item revenue by category" : `Net item revenue by month, ${ctx.cur}`), height: 400, when: (ctx) => !!ctx.cv && ctx.cv.trend.length > 1,
+      title: "Category development", sub: (ctx) => (ctx.state.catTrend === "share" ? "Share of monthly item revenue by category" : `Net item revenue by month, ${ctx.cur}`), height: 380, when: (ctx) => !!ctx.cv && ctx.cv.trend.length > 1,
       controls: [{ key: "catTrend", options: [["abs", "Revenue"], ["share", "Share"]] }],
-      how: "Shows which categories drive growth and how the mix shifts with the season. A category losing share every month while total revenue grows deserves a closer look.",
+      how: "Shows which categories drive growth and how the mix shifts with the season. A category losing share month after month while total revenue grows deserves a closer look.",
       chart: (ctx) => {
         const T_ = ctx.cv.trend, cats = ctx.cv.categories, share = ctx.state.catTrend === "share", labels = T_.map((r) => r.month);
         const tot = T_.map((r) => cats.reduce((a, c) => a + Math.max(r[c] || 0, 0), 0));
         return { ...base(), tooltip: { ...base().tooltip, trigger: "axis", axisPointer: shadow, valueFormatter: (v) => (share ? pct(v, 1) : money(v, ctx.cur)) },
           xAxis: axis({ type: "category", data: labels, axisLabel: { color: T.muted, fontSize: 11.5, formatter: (v) => (v.slice(5) === "01" || v === labels[0] ? v : v.slice(5)) } }),
           yAxis: axis({ type: "value", max: share ? 1 : null, axisLabel: { color: T.muted, formatter: (v) => (share ? pct(v) : compact(v)) } }),
-          series: cats.map((c, i) => ({ name: c, type: "bar", stack: "t", barMaxWidth: 26, color: RFM.categoryColor(ctx.R, c), itemStyle: { borderColor: "#fff", borderWidth: 1 },
+          series: cats.map((c) => ({ name: c, type: "bar", stack: "t", barMaxWidth: 26, color: RFM.categoryColor(ctx.R, c), itemStyle: { borderColor: "#fff", borderWidth: 1 },
             data: T_.map((r, j) => (share ? (tot[j] ? Math.max(r[c] || 0, 0) / tot[j] : 0) : r[c] || 0)) })) };
       },
       table: (ctx) => ({ cols: [{ key: "month", label: "Month" }, ...ctx.cv.categories.map((c) => ({ key: c, label: c, num: 1, fmt: (v) => fmt(v) }))], rows: ctx.cv.trend }),
     },
+    "cat-segmix": {
+      title: "Where buyers are slipping away", height: 460, when: (ctx) => !!ctx.cv,
+      sub: (ctx) => (ctx.state.mixMode === "count" ? "Each category's buyers by overall RFM segment (customers)" : "Each category's buyers by overall RFM segment (100% per bar)"),
+      controls: [{ key: "mixMode", options: [["share", "100%"], ["count", "Customers"]] }],
+      how: "A category whose bar is dominated by Hibernating, Needs Attention or At Risk customers is losing its buyers: reactivation pays back there before acquisition. Switch to Customers to see absolute sizes. Hover a block to highlight its segment.",
+      chart: (ctx) => stackMix(ctx, ctx.cv.categories, ctx.cv.segment_mix, "category", ctx.state.mixMode),
+      onChart: hoverSeries,
+      table: (ctx) => ({ cols: [{ key: "segment", label: "Segment" }, ...ctx.cv.categories.map((c) => ({ key: c, label: c, num: 1, fmt: (v) => pct(v, 1) }))],
+        rows: ctx.order.map((s) => ({ segment: s, ...Object.fromEntries(ctx.cv.segment_mix.filter((x) => x.segment === s).map((x) => [x.category, x.share])) })) }),
+    },
+
+    "cat-ch3": { plain: true, when: (ctx) => !!ctx.cv && ctx.cv.plays.length > 0, html: (ctx) => chapter("03", "What to do", ctx.cv.headlines.resolution) },
+    "cat-plays": {
+      plain: true, when: (ctx) => !!ctx.cv && ctx.cv.plays.length > 0,
+      html: (ctx) => `<div class="plays n${ctx.cv.plays.length}">${ctx.cv.plays.map((p, i) => `<article class="play ${i === 0 ? "hl" : ""}">
+          <div class="play-top"><span class="play-n">${String(i + 1).padStart(2, "0")}</span><span class="pill info">${p.kicker}</span></div>
+          <div class="play-metric">${p.metric}</div><div class="play-ml">${p.metric_label}</div>
+          <h3>${p.title}</h3>
+          <dl><dt>Why</dt><dd>${p.why}</dd><dt>Who</dt><dd>${p.who}</dd><dt>How</dt><dd>${p.how}</dd><dt>Measure</dt><dd>${p.measure}</dd></dl>
+        </article>`).join("")}</div>
+        <p class="small muted">Moves are generated from the numbers and ranked by an indicative 5% response on each move's audience. Use them as a starting point for the plan, not as a forecast.</p>`,
+    },
+    "cat-next": {
+      title: "Next best category", sub: (ctx) => (ctx.state.nextMode === "matrix" ? "Of the buyers of a row's category, the share who also bought the column's" : "What to recommend after each category"),
+      when: (ctx) => !!ctx.cv && ctx.cv.next.length > 0,
+      controls: [{ key: "nextMode", options: [["list", "Recommendations"], ["matrix", "All pairs"]] }],
+      how: "The recommendation is the category with the highest lift: how much more likely than average a category's buyers are to also buy it (1.0× = average). “Not yet” is the audience: buyers of the category who have not bought the recommended one. Association only — test against a holdout.",
+      useHtml: (ctx) => ctx.state.nextMode !== "matrix",
+      height: 340,
+      html: (ctx) => RFM.table([
+        { key: "category", label: "Bought", html: 1, fmt: (v) => `<span class="swatch" style="background:${RFM.categoryColor(ctx.R, v)}"></span><b>${esc(v)}</b>` },
+        { key: "next", label: "Recommend next", html: 1, fmt: (v) => `<span class="swatch" style="background:${RFM.categoryColor(ctx.R, v)}"></span>${esc(v)}` },
+        { key: "lift", label: "Lift", num: 1, fmt: (v) => fmt(v, 2) + "×" },
+        { key: "share", label: "Already buy it", num: 1, fmt: (v) => pct(v) },
+        { key: "not_yet", label: "Not yet (audience)", num: 1, fmt: (v) => fmt(v) },
+        { key: "common_second", label: "Most common 2nd order", fmt: (v) => v || "–" },
+      ], ctx.cv.next),
+      chart: (ctx) => {
+        const cats = ctx.cv.categories, data = ctx.cv.cross.map((c) => [cats.indexOf(c.b), cats.indexOf(c.a), c.share, c.lift, c.both]);
+        const mx = Math.max(...data.map((d) => d[2]), 0.01);
+        return { ...base(), grid: { left: 8, right: 8, top: 36, bottom: 8, containLabel: true },
+          tooltip: { ...base().tooltip, formatter: (p) => `Of <b>${esc(cats[p.value[1]])}</b> buyers, <b>${pct(p.value[2])}</b> also bought ${esc(cats[p.value[0]])}<br>Lift ${fmt(p.value[3], 2)}× · ${fmt(p.value[4])} customers` },
+          xAxis: axis({ type: "category", data: cats, position: "top", axisLine: { show: false }, axisLabel: { color: T.navy, fontWeight: 600 } }),
+          yAxis: axis({ type: "category", data: cats, inverse: true, axisLine: { show: false }, axisLabel: { color: T.navy, fontWeight: 600 } }),
+          visualMap: { show: false, min: 0, max: mx, dimension: 2, inRange: { color: T.seq } },
+          series: [{ type: "heatmap", data: data.map((d) => ({ value: d, label: RFM.cellLabel(d[2], mx) })), itemStyle: { borderColor: "#fff", borderWidth: 3, borderRadius: 6 }, label: { show: true, fontSize: 11.5, formatter: (p) => pct(p.value[2]) } }] };
+      },
+    },
+    "cat-flow": {
+      title: "What new customers buy next", sub: () => "Category of the first order (left) and the second order (right)", height: 400, when: (ctx) => !!ctx.cv && ctx.cv.sankey.length > 0,
+      how: "Follow a band from left to right. Wide bands into another category are natural next-category recommendations for onboarding; the grey block is new customers who have not come back yet — the size of the onboarding challenge.",
+      chart: (ctx) => {
+        const links = ctx.cv.sankey, names = [...new Set(links.flatMap((l) => [l.source, l.target]))], plain = (n) => n.replace(" ·2nd", "");
+        return { ...base(), animation: false, tooltip: { ...base().tooltip, formatter: (p) => (p.dataType === "edge" ? `${fmt(p.data.value)} customers started with <b>${esc(plain(p.data.source))}</b> and ${p.data.target.startsWith("No 2nd") ? "have not bought again" : `next bought <b>${esc(plain(p.data.target))}</b>`}` : `<b>${esc(plain(p.name))}</b>`) },
+          series: [{ type: "sankey", left: 8, right: 150, top: 8, bottom: 8, nodeGap: 10, nodeWidth: 14, draggable: false, emphasis: { focus: "adjacency" },
+            data: names.map((n) => ({ name: n, itemStyle: { color: n.startsWith("No 2nd") ? T.line : RFM.categoryColor(ctx.R, plain(n)), borderWidth: 0 } })),
+            links, lineStyle: { color: "gradient", opacity: 0.35, curveness: 0.5 }, label: { color: T.navy, fontSize: 12, formatter: (p) => plain(p.name) } }] };
+      },
+      table: (ctx) => ({ cols: [{ key: "source", label: "First order" }, { key: "target", label: "Second order", fmt: (v) => v.replace(" ·2nd", "") }, { key: "value", label: "Customers", num: 1, fmt: (v) => fmt(v) }], rows: ctx.cv.sankey }),
+    },
     "cat-aud": {
-      title: "Cross-sell audiences", sub: () => "Customers in a valuable segment who never bought a category, but whose categories go together with it", when: (ctx) => !!ctx.cv && ctx.cv.audiences.length > 0,
-      how: "Affinity is the average lift between the categories each customer already buys and the target category (1.0× = average). Only customers with affinity of 1.0× or more are included. Audiences overlap: one customer can appear for several categories.",
+      title: "Cross-sell audiences", sub: (ctx) => `Valuable segments who never bought a category that goes with what they buy · revenue in play at ${pct(+ctx.state.conv)} conversion`,
+      when: (ctx) => !!ctx.cv && ctx.cv.audiences.length > 0,
+      controls: [{ key: "conv", options: [["0.02", "2%"], ["0.05", "5%"], ["0.1", "10%"]] }],
+      how: "Affinity is the average lift between the categories each customer already buys and the target category (1.0× = average); only customers at 1.0× or more are included. Revenue in play = customers × conversion × the category's average order value — a scenario, not a forecast. Audiences overlap.",
       html: (ctx) => {
-        const act = { "Champions": "VIP early access to the category", "Loyal High Value": "Bundle with their main category", "Potential Loyalists": "Second-category offer in the post-purchase flow",
-          "New Customers": "Feature the category in onboarding", "At Risk High Value": "Win-back with inspiration from the category" };
-        const rows = ctx.cv.audiences.map((a) => ({ ...a, name: `${a.segment} → ${a.category}`, action: act[a.segment] || "Cross-sell campaign" }));
+        const act = { "Champions": "VIP early access to the category", "Loyal High Value": "Bundle with their main category", "Potential Loyalists": "Second-category offer after purchase",
+          "New Customers": "Feature the category in onboarding", "At Risk High Value": "Win-back with category inspiration" };
+        const rows = ctx.cv.audiences.map((a) => ({ ...a, name: `${a.segment} → ${a.category}`, play: a.customers * +ctx.state.conv * (a.order_value || 0), action: act[a.segment] || "Cross-sell campaign" }));
         return RFM.table([
           { key: "name", label: "Audience", html: 1, fmt: (v, r) => `<span class="swatch" style="background:${RFM.categoryColor(ctx.R, r.category)}"></span><b>${esc(v)}</b>` },
           { key: "customers", label: "Customers", num: 1, fmt: (v) => fmt(v) },
           { key: "consented", label: "With consent", num: 1, fmt: (v) => fmt(v) },
           { key: "affinity", label: "Affinity", num: 1, fmt: (v) => fmt(v, 2) + "×" },
-          { key: "revenue_per_customer", label: "Revenue / customer", num: 1, fmt: (v) => fmt(v) },
+          { key: "play", label: "Revenue in play", num: 1, fmt: (v) => money(v, ctx.cur) },
           { key: "action", label: "Suggested action" },
           { key: "name", label: "", html: 1, fmt: () => `<button class="btn btn-ghost btn-sm" data-export title="Downloads the customer list (hashed emails) for Customer Match / Meta">Export</button>` },
-        ], rows) + `<p class="small muted">Exports contain hashed emails and customer IDs — handle them like client data. Measure every campaign against a holdout: affinity shows what goes together, not what a campaign will cause.</p>`;
+        ], rows) + `<p class="small muted">Exports contain hashed emails and customer IDs — handle them like client data.</p>`;
+      },
+    },
+    "cat-crm": {
+      title: "Category CRM segments", sub: (ctx) => `Customers scored within each category (own cut-offs) · ${ctx.state.crmMode === "consent" ? "with marketing consent" : "all customers"}`,
+      when: (ctx) => !!ctx.cv && ctx.cv.crm.length > 0,
+      controls: [{ key: "crmMode", options: [["all", "Customers"], ["consent", "With consent"]] }],
+      how: "Each customer is scored again on their purchases in each category, with cut-offs for that category's buyers, and placed in the same segments. Use the cells as ready-made audiences for category campaigns — e.g. Hibernating in Beauty for a Beauty reactivation. A “Champion” in a small category is not the same spend as one in a large category.",
+      html: (ctx) => {
+        const cats = ctx.cv.categories.filter((c) => ctx.cv.crm[0][c] != null), suf = ctx.state.crmMode === "consent" ? "|consent" : "";
+        const mx = Object.fromEntries(cats.map((c) => [c, Math.max(...ctx.cv.crm.map((r) => r[c + suf] || 0), 1)]));
+        const rows = ctx.cv.crm.filter((r) => cats.some((c) => r[c])).map((r) => `<tr><td><b>${esc(r.segment)}</b></td>${cats.map((c) => {
+          const v = r[c + suf] || 0, a = v / mx[c];
+          return `<td class="n heat" style="background:rgba(40,70,220,${(0.06 + a * 0.5).toFixed(2)});color:${a > 0.6 ? "#fff" : "inherit"}">${fmt(v)}</td>`;
+        }).join("")}</tr>`).join("");
+        return `<div class="table-wrap"><table class="t"><thead><tr><th>Segment</th>${cats.map((c) => `<th class="n"><span class="swatch" style="background:${RFM.categoryColor(ctx.R, c)}"></span>${esc(c)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`;
+      },
+    },
+    "cat-notes": {
+      plain: true, when: (ctx) => !!ctx.cv,
+      html: (ctx) => {
+        const m = ctx.R.categories.meta, gap = m.item_vs_transaction_gap;
+        return `<details class="card notes"><summary><b>Methodology and caveats</b><span class="small muted">How the category numbers are calculated</span></summary><ul>
+          <li><b>Revenue</b> comes from item lines, net of returned lines, converted to ${esc(ctx.cur)}. Item lines total ${pct(Math.abs(gap), 1)} ${gap >= 0 ? "more" : "less"} than transaction amounts (usually VAT, shipping or discounts on a different basis). RFM scores and segments use transaction amounts.</li>
+          <li><b>Growth</b> compares the last ${m.half_months} months of the window with the ${m.half_months} months before. <b>Lapsing</b> = buyers with an overall R score of 1–2.</li>
+          <li><b>Shopper types</b> use each customer's ${m.basis === "orders" ? "orders" : "item revenue"}: ${pct(m.dominance)}+ in one category makes a “[category] shopper”, two categories a “Cross-shopper”, three or more a “Multi-category shopper”.</li>
+          <li><b>Category CRM segments</b> use cut-offs calculated for each category's buyers, so segments are comparable within a category, not across categories.</li>
+          <li><b>Moves and revenue in play</b> are generated from the numbers and use an indicative response rate. Affinity and lift show what goes together, not what a campaign will cause — measure every move against a holdout.</li>
+          <li>Categories beyond the ${m.max_named} largest are grouped as “Other”. Sub-categories with fewer than ${m.small} buyers are flagged as too small to read.</li>
+        </ul></details>`;
       },
     },
   };
@@ -650,8 +624,10 @@
     segments: { label: "Segments", rows: [["seg-kpis"], ["seg-rf", "seg-map"], ["seg-mix"], ["seg-actions"], ["seg-cutoffs"]] },
     cohorts: { label: "Cohorts", rows: [["coh-stats"], ["coh-heat"], ["coh-ltv", "coh-second"], ["coh-monthly"]] },
     markets: { label: "Markets", rows: [["mk-none"], ["mk-cards"], ["mk-table"], ["mk-segshare"], ["mk-retention"]] },
-    categories: { label: "Categories", rows: [["cat-none"], ["cat-stats"], ["cat-notes"], ["cat-insights", "cat-tree"], ["cat-kpis"], ["cat-segmix"],
-      ["cat-rfm", "cat-vs"], ["cat-breadth", "cat-shoppers"], ["cat-cross", "cat-cycle"], ["cat-entry", "cat-flow"], ["cat-trend"], ["cat-aud"]] },
+    categories: { label: "Categories", rows: [["cat-none"],
+      ["cat-ch1"], ["cat-stats"], ["cat-kpis"], ["cat-breadth", "cat-shoppers"],
+      ["cat-ch2"], ["cat-momentum", "cat-cycle"], ["cat-trend"], ["cat-segmix"],
+      ["cat-ch3"], ["cat-plays"], ["cat-next"], ["cat-flow"], ["cat-aud"], ["cat-crm"], ["cat-notes"]] },
   };
 
   RFM.CARDS = CARDS;

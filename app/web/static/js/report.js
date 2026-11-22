@@ -10,7 +10,8 @@
     const fromHash = (location.hash || "").slice(1);
     const state = { market: "all", channel: "all", loyalty: "all", category: "all", tab: tabs.includes(fromHash) ? fromHash : "overview",
       cohMeasure: "customers", trend: "revenue", show: {}, expanded: {},
-      catSel: null, crossMode: "share", breadth: "revenue_per_customer", entryMetric: "back_180", catTrend: "abs" };
+      breadth: "revenue_per_customer", catTrend: "abs", momentum: "growth", mixMode: "share", mkMix: "share", nextMode: "list",
+      conv: "0.05", crmMode: "all", hoverSeries: null };
     const m = R.meta;
     const filters = [
       ["market", "All markets", R.filters.market], ["channel", "All channels", R.filters.channel], ["loyalty", "Members and non-members", R.filters.loyalty],
@@ -44,7 +45,6 @@
       if (mk && state.market !== "all") mk = { ...mk, rows: mk.rows.filter((r) => r.market === state.market), retention: mk.retention.filter((r) => r.market === state.market) };
       if (mk && (!m.has.market || mk.rows.length < 1)) mk = null;
       const cv = CV ? CV.views[`${state.market}|${state.channel}|${state.loyalty}|${state.category}`] || null : null;
-      if (cv && (!state.catSel || !cv.categories.includes(state.catSel))) state.catSel = cv.categories[0];
       return { R, view, mk, cv, state, cur: m.currency, order: R.segments.order };
     }
 
@@ -74,11 +74,11 @@
       if (showTable && def.table) {
         const t = def.table(c);
         body.innerHTML = RFM.table(t.cols, t.rows, { cls: "chart-table" });
-      } else if (def.chart) {
+      } else if (def.chart && !(def.useHtml && def.useHtml(c))) {
         const box = h(`<div class="chart" style="height:${def.height || 340}px"></div>`);
         body.appendChild(box);
         el._draw = () => {
-          try { RFM.chart(box, def.chart(c)); } catch (err) {
+          try { const inst = RFM.chart(box, def.chart(c)); if (def.onChart && inst) def.onChart(inst, c); } catch (err) {
             console.error(`chart ${id}:`, err);
             box.style.height = "auto";
             box.innerHTML = '<p class="muted small">This chart could not be drawn for the current filters.</p>';
@@ -118,6 +118,15 @@
       if (sum) sum.textContent = active && n != null ? `${fmt(n)} customers in view` : "";
     }
 
+    // A toggle inside a card redraws only that card, so other charts keep their state and do not re-animate.
+    function rerender(oldEl, id) {
+      const el = card(id, ctx());
+      if (!el) return;
+      RFM.disposeCharts(oldEl);
+      oldEl.replaceWith(el);
+      if (el._draw) el._draw();
+    }
+
     root.addEventListener("change", (e) => {
       const f = e.target.closest("[data-filter]");
       if (f) { state[f.dataset.filter] = f.value; render(); }
@@ -130,7 +139,7 @@
       if (!cardEl) return;
       const id = cardEl.dataset.card;
       if (e.target.closest("[data-how]")) { const box = $(".how", cardEl), b = e.target.closest("[data-how]"); box.hidden = !box.hidden; b.textContent = box.hidden ? "How to read" : "Hide explanation"; return; }
-      if (e.target.closest("[data-table]")) { state.show[id] = !state.show[id]; render(); return; }
+      if (e.target.closest("[data-table]")) { state.show[id] = !state.show[id]; rerender(cardEl, id); return; }
       const exp = e.target.closest("[data-expand]");
       if (exp) {
         const k = exp.dataset.expand;
@@ -140,7 +149,7 @@
         return;
       }
       const ctl = e.target.closest("[data-ctl]");
-      if (ctl) { state[ctl.dataset.ctl] = ctl.dataset.v; render(); }
+      if (ctl) { state[ctl.dataset.ctl] = ctl.dataset.v; rerender(cardEl, id); }
     });
     render();
     return { state, render };
