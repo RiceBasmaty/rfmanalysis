@@ -18,6 +18,11 @@
   RFM.SEGMENT_INK = ["#fff", "#143255", "#fff", "#143255", "#fff", "#fff", "#143255", "#143255"];
   RFM.segmentColor = (i) => (i < RFM.SEGMENT_COLORS.length ? RFM.SEGMENT_COLORS[i] : RFM.T.muted);
   RFM.segmentInk = (i) => (i < RFM.SEGMENT_INK.length ? RFM.SEGMENT_INK[i] : "#fff");
+  // Categories reuse the validated 8-colour order, fixed by revenue rank in the whole dataset ("Other" is grey),
+  // so a category keeps its colour under every filter.
+  RFM.categoryIndex = (R, name) => (R.categories ? R.categories.meta.categories.indexOf(name) : -1);
+  RFM.categoryColor = (R, name) => { const i = RFM.categoryIndex(R, name); return i < 0 ? RFM.T.muted : RFM.segmentColor(i); };
+  RFM.categoryInk = (R, name) => { const i = RFM.categoryIndex(R, name); return i < 0 ? "#fff" : RFM.segmentInk(i); };
 
   /* ---------- formatting ---------- */
   const nf = (d) => new Intl.NumberFormat("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });

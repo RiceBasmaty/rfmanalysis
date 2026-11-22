@@ -8,12 +8,15 @@
   function mount(root, R, opts = {}) {
     const tabs = Object.keys(RFM.LAYOUT);
     const fromHash = (location.hash || "").slice(1);
-    const state = { market: "all", channel: "all", loyalty: "all", tab: tabs.includes(fromHash) ? fromHash : "overview",
-      cohMeasure: "customers", trend: "revenue", show: {} };
+    const state = { market: "all", channel: "all", loyalty: "all", category: "all", tab: tabs.includes(fromHash) ? fromHash : "overview",
+      cohMeasure: "customers", trend: "revenue", show: {}, expanded: {},
+      catSel: null, crossMode: "share", breadth: "revenue_per_customer", entryMetric: "back_180", catTrend: "abs" };
     const m = R.meta;
     const filters = [
       ["market", "All markets", R.filters.market], ["channel", "All channels", R.filters.channel], ["loyalty", "Members and non-members", R.filters.loyalty],
+      ["category", "All categories", R.filters.category || []],
     ].filter(([, , o]) => o.length > 1);
+    const CV = R.categories || null;
 
     root.innerHTML = `
       <div class="report-root">
@@ -40,18 +43,31 @@
       let mk = R.markets[`${state.channel}|${state.loyalty}`] || null;
       if (mk && state.market !== "all") mk = { ...mk, rows: mk.rows.filter((r) => r.market === state.market), retention: mk.retention.filter((r) => r.market === state.market) };
       if (mk && (!m.has.market || mk.rows.length < 1)) mk = null;
-      return { R, view, mk, state, cur: m.currency, order: R.segments.order };
+      const cv = CV ? CV.views[`${state.market}|${state.channel}|${state.loyalty}|${state.category}`] || null : null;
+      if (cv && (!state.catSel || !cv.categories.includes(state.catSel))) state.catSel = cv.categories[0];
+      return { R, view, mk, cv, state, cur: m.currency, order: R.segments.order };
     }
 
+    // A card that fails to build shows a short message instead of breaking the whole report.
     function card(id, c) {
+      try { return buildCard(id, c); } catch (err) {
+        console.error(`card ${id}:`, err);
+        const def = RFM.CARDS[id] || {};
+        return h(`<div class="card"><h3>${esc(def.title || id)}</h3><p class="muted small">This chart could not be drawn for the current filters.</p></div>`);
+      }
+    }
+
+    function buildCard(id, c) {
       const def = RFM.CARDS[id];
       if (!def || (def.when && !def.when(c))) return null;
       if (def.plain) return h(`<div>${def.html(c)}</div>`);
       const showTable = state.show[id];
-      const ctl = (def.controls || []).map((k) => `<div class="seg" role="group" aria-label="${k.key}">${k.options.map(([v, l]) => `<button data-ctl="${k.key}" data-v="${v}" aria-pressed="${c.state[k.key] === v}">${l}</button>`).join("")}</div>`).join("");
+      const controls = typeof def.controls === "function" ? def.controls(c) : def.controls || [];
+      const ctl = controls.map((k) => `<div class="seg" role="group" aria-label="${k.key}">${k.options.map(([v, l]) => `<button data-ctl="${k.key}" data-v="${v}" aria-pressed="${c.state[k.key] === v}">${l}</button>`).join("")}</div>`).join("");
       const el = h(`<div class="card" data-card="${id}">
         <div class="card-head"><div><h3>${esc(def.title)}</h3>${def.sub ? `<div class="sub">${esc(def.sub(c))}</div>` : ""}</div>
-          <div class="card-actions">${ctl}${def.how ? '<button class="btn btn-ghost btn-sm" data-how>How to read</button>' : ""}${def.table ? `<button class="btn btn-ghost btn-sm" data-table>${showTable ? "View as chart" : "View as table"}</button>` : ""}</div></div>
+          <div class="card-actions">${def.how ? '<button class="btn btn-ghost btn-sm" data-how>How to read</button>' : ""}${def.table ? `<button class="btn btn-ghost btn-sm" data-table>${showTable ? "View as chart" : "View as table"}</button>` : ""}</div></div>
+        ${ctl ? `<div class="card-controls">${ctl}</div>` : ""}
         ${def.how ? `<div class="how" hidden><b>How to read</b>${esc(def.how)}</div>` : ""}
         <div data-body></div></div>`);
       const body = $("[data-body]", el);
@@ -61,7 +77,13 @@
       } else if (def.chart) {
         const box = h(`<div class="chart" style="height:${def.height || 340}px"></div>`);
         body.appendChild(box);
-        el._draw = () => RFM.chart(box, def.chart(c));
+        el._draw = () => {
+          try { RFM.chart(box, def.chart(c)); } catch (err) {
+            console.error(`chart ${id}:`, err);
+            box.style.height = "auto";
+            box.innerHTML = '<p class="muted small">This chart could not be drawn for the current filters.</p>';
+          }
+        };
       } else {
         body.innerHTML = def.html(c);
       }
@@ -73,12 +95,14 @@
       $$("[data-tab]", root).forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === state.tab));
       const c = ctx();
       panel.innerHTML = "";
-      if (!c.view) {
+      if (!c.view || (state.tab === "categories" && CV && !c.cv)) {
         panel.appendChild(h(`<div class="card empty"><h3>No customers match these filters</h3><p class="muted">Change or reset the filters.</p></div>`));
         return;
       }
       const wrap = h(`<div class="grid"></div>`);
       const draws = [];
+      if (state.category !== "all" && state.tab !== "categories" && CV && !CV.meta.all_tabs)
+        wrap.appendChild(h(`<div>${RFM.banner("info", `Category filter: ${state.category} buyers`, "In this version the category filter changes the Categories tab only. The other tabs show all customers.")}</div>`));
       for (const row of RFM.LAYOUT[state.tab].rows) {
         const cards = row.map((id) => card(id, c)).filter(Boolean);
         if (!cards.length) continue;
@@ -89,7 +113,9 @@
       panel.appendChild(wrap);
       draws.forEach((d) => d());
       const sum = $("[data-fsum]", root);
-      if (sum) sum.textContent = c.view && (state.market !== "all" || state.channel !== "all" || state.loyalty !== "all") ? `${fmt(c.view.customers)} customers in view` : "";
+      const active = ["market", "channel", "loyalty", "category"].some((k) => state[k] !== "all");
+      const n = state.tab === "categories" && c.cv ? c.cv.summary.customers_with_items : c.view && c.view.customers;
+      if (sum) sum.textContent = active && n != null ? `${fmt(n)} customers in view` : "";
     }
 
     root.addEventListener("change", (e) => {
@@ -99,12 +125,20 @@
     root.addEventListener("click", (e) => {
       const t = e.target.closest("[data-tab]");
       if (t) { state.tab = t.dataset.tab; if (opts.hashTabs !== false) history.replaceState(null, "", "#" + state.tab); render(); opts.onTab && opts.onTab(state.tab); return; }
-      if (e.target.closest("[data-reset]")) { state.market = state.channel = state.loyalty = "all"; $$("[data-filter]", root).forEach((s) => (s.value = "all")); render(); return; }
+      if (e.target.closest("[data-reset]")) { state.market = state.channel = state.loyalty = state.category = "all"; $$("[data-filter]", root).forEach((s) => (s.value = "all")); render(); return; }
       const cardEl = e.target.closest("[data-card]");
       if (!cardEl) return;
       const id = cardEl.dataset.card;
       if (e.target.closest("[data-how]")) { const box = $(".how", cardEl), b = e.target.closest("[data-how]"); box.hidden = !box.hidden; b.textContent = box.hidden ? "How to read" : "Hide explanation"; return; }
       if (e.target.closest("[data-table]")) { state.show[id] = !state.show[id]; render(); return; }
+      const exp = e.target.closest("[data-expand]");
+      if (exp) {
+        const k = exp.dataset.expand;
+        state.expanded[k] = !state.expanded[k];
+        cardEl.querySelectorAll("[data-parent]").forEach((r) => { if (r.dataset.parent === k) r.hidden = !state.expanded[k]; });
+        exp.setAttribute("aria-expanded", String(!!state.expanded[k]));
+        return;
+      }
       const ctl = e.target.closest("[data-ctl]");
       if (ctl) { state[ctl.dataset.ctl] = ctl.dataset.v; render(); }
     });
